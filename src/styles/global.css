@@ -613,6 +613,25 @@ a.row:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
   line-height: 1.2;
 }
 
+.story h3 {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.story.cont {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.story.sub {
+  border-top: none;
+  margin-top: 20px;
+  padding-top: 8px;
+}
+
 .story .take {
   margin: 10px 0 0;
   font-size: 18px;
@@ -709,6 +728,10 @@ a.row:hover h3 { text-decoration: underline; text-underline-offset: 3px; }
 
   .story-media-grid.two {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .story.wide .story-media {
+    max-width: 52rem;
   }
 }
 

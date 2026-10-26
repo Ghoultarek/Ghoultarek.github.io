@@ -13,6 +13,21 @@ const { area } = Astro.props;
 const others = areas.filter((item) => item.slug !== area.slug && item.slug !== "air-mobility" && item.slug !== "perception");
 const showAir = area.slug !== "air-mobility";
 const isEssay = Boolean(area.story && area.story.length > 0);
+
+function marks(text: string) {
+  const re = /\*\*([^*]+)\*\*|\*([^*]+)\*/g;
+  const nodes: { t: "text" | "b" | "i"; v: string }[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (m.index > last) nodes.push({ t: "text", v: text.slice(last, m.index) });
+    if (m[1]) nodes.push({ t: "b", v: m[1] });
+    else if (m[2]) nodes.push({ t: "i", v: m[2] });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) nodes.push({ t: "text", v: text.slice(last) });
+  return nodes.length ? nodes : [{ t: "text" as const, v: text }];
+}
 ---
 <Base title={`${area.title} — Tarek Ghoul`} description={area.lede}>
   <main id="main" class:list={["wrap", { essay: isEssay }]}>
@@ -24,12 +39,17 @@ const isEssay = Boolean(area.story && area.story.length > 0);
     {
       area.story && area.story.map((beat) => {
         const hasMedia = Boolean(beat.film || beat.still || (beat.stills && beat.stills.length));
-        const wideMedia = Boolean(beat.stills && beat.stills.length > 1);
+        const wideMedia = Boolean(beat.wide || (beat.stills && beat.stills.length > 1));
         return (
-        <section class:list={["story", { split: hasMedia && !wideMedia, wide: wideMedia }]}>
+        <section class:list={["story", { split: hasMedia && !wideMedia, wide: wideMedia, cont: !beat.heading, sub: beat.level === 3 }]}>
           <div class="story-copy">
-            <h2>{beat.heading}</h2>
-            {beat.take && <p class="take">{beat.take}</p>}
+            {beat.heading && beat.level === 3 && <h3>{beat.heading}</h3>}
+            {beat.heading && beat.level !== 3 && <h2>{beat.heading}</h2>}
+            {beat.take && (
+              <p class="take">
+                {marks(beat.take).map((n) => n.t === "b" ? <strong>{n.v}</strong> : n.t === "i" ? <em>{n.v}</em> : n.v)}
+              </p>
+            )}
             {beat.stats && beat.stats.length > 0 && (
               <dl class="stats">
                 {beat.stats.map((stat) => (
@@ -41,12 +61,16 @@ const isEssay = Boolean(area.story && area.story.length > 0);
               </dl>
             )}
             {beat.paras?.map((para) => (
-              <p>{para}</p>
+              <p>
+                {marks(para).map((n) => n.t === "b" ? <strong>{n.v}</strong> : n.t === "i" ? <em>{n.v}</em> : n.v)}
+              </p>
             ))}
             {beat.points && beat.points.length > 0 && (
               <ul class="points">
                 {beat.points.map((point) => (
-                  <li>{point}</li>
+                  <li>
+                    {marks(point).map((n) => n.t === "b" ? <strong>{n.v}</strong> : n.t === "i" ? <em>{n.v}</em> : n.v)}
+                  </li>
                 ))}
               </ul>
             )}
@@ -57,7 +81,7 @@ const isEssay = Boolean(area.story && area.story.length > 0);
                 {beat.film.src.endsWith(".mp4") ? (
                   <video class="clip" src={beat.film.src} poster={beat.film.poster} data-still={beat.film.poster} autoplay muted loop playsinline preload="metadata" width="1280" height="720"></video>
                 ) : (
-                  <img class="clip" src={beat.film.src} data-still={beat.film.poster} alt="" width="960" height="540" loading="lazy" decoding="async" />
+                  <img class="clip" src={beat.film.src} data-still={beat.film.poster} alt={beat.film.caption} width="960" height="540" loading={beat.wide ? "eager" : "lazy"} decoding="async" />
                 )}
               </div>
               <figcaption>{beat.film.caption}</figcaption>
@@ -65,7 +89,7 @@ const isEssay = Boolean(area.story && area.story.length > 0);
           )}
           {beat.still && (
             <figure class="story-media">
-              <img src={beat.still.src} alt={beat.still.alt} width="1200" height="800" loading="lazy" decoding="async" />
+              <img src={beat.still.src} alt={beat.still.alt} width="1200" height="800" loading={beat.wide ? "eager" : "lazy"} decoding="async" />
               <figcaption>{beat.still.caption}</figcaption>
             </figure>
           )}
@@ -87,7 +111,7 @@ const isEssay = Boolean(area.story && area.story.length > 0);
     {
       area.cites && area.cites.length > 0 && (
         <section class="story cites">
-          <h2>Papers</h2>
+          <h2>Publications</h2>
           <ul>
             {area.cites.map((cite) => (
               <li>
