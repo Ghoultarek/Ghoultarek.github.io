@@ -1,0 +1,25 @@
+---
+import Base from "../layouts/Base.astro";
+import { projects } from "../data/profile";
+---
+<Base title="Projects — Tarek Ghoul" description="Projects by Tarek Ghoul.">
+  <main id="main" class="wrap">
+    <header class="page-title">
+      <h1>Projects</h1>
+      <p class="lede">
+        Industry and government work through the UBC Bureau of Intelligent Transportation Systems and Mobility,
+        plus the published routing application.
+      </p>
+    </header>
+    {
+      projects.map((project) => (
+        <article class="project" id={project.id}>
+          <h2>{project.title}</h2>
+          <p class="where">{project.where}</p>
+          {project.image && <img src={project.image} alt={project.imageAlt} width="1200" height="700" loading="lazy" decoding="async" />}
+          <p>{project.text}</p>
+        </article>
+      ))
+    }
+  </main>
+</Base>

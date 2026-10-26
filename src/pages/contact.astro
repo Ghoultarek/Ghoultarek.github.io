@@ -1,0 +1,20 @@
+---
+import Base from "../layouts/Base.astro";
+import { profile } from "../data/profile";
+---
+<Base title="Contact — Tarek Ghoul" description="Contact Tarek Ghoul.">
+  <main id="main" class="wrap">
+    <header class="page-title">
+      <h1>Contact</h1>
+      <p class="lede">
+        {profile.location}. Postdoctoral researcher at the University of British Columbia.
+      </p>
+      <div class="contact-links">
+        <a class="btn" href={`mailto:${profile.email}`}>{profile.email}</a>
+        <a class="chip" href={profile.scholar}>Google Scholar</a>
+        <a class="chip" href={profile.linkedin}>LinkedIn</a>
+        <a class="chip" href={profile.cv}>CV</a>
+      </div>
+    </header>
+  </main>
+</Base>

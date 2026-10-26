@@ -1,0 +1,25 @@
+---
+import Base from "../layouts/Base.astro";
+import { talks } from "../data/profile";
+---
+<Base title="Talks — Tarek Ghoul" description="Talks and posters by Tarek Ghoul.">
+  <main id="main" class="wrap">
+    <header class="page-title">
+      <h1>Talks</h1>
+      <p class="lede">Selected talks and posters from the academic CV.</p>
+    </header>
+    <section class="group">
+      {
+        talks.map((talk) => (
+          <article class="row talk">
+            <div class="year">{talk.year}</div>
+            <div>
+              <h3>{talk.title}</h3>
+              <p class="meta">{talk.kind}. {talk.where}.</p>
+            </div>
+          </article>
+        ))
+      }
+    </section>
+  </main>
+</Base>

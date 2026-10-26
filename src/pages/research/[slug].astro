@@ -1,0 +1,165 @@
+---
+import Base from "../../layouts/Base.astro";
+import { areas } from "../../data/research";
+
+export function getStaticPaths() {
+  return areas.map((area) => ({
+    params: { slug: area.slug },
+    props: { area },
+  }));
+}
+
+const { area } = Astro.props;
+const others = areas.filter((item) => item.slug !== area.slug && item.slug !== "air-mobility" && item.slug !== "perception");
+const showAir = area.slug !== "air-mobility";
+const isEssay = Boolean(area.story && area.story.length > 0);
+---
+<Base title={`${area.title} — Tarek Ghoul`} description={area.lede}>
+  <main id="main" class:list={["wrap", { essay: isEssay }]}>
+    <header class="page-title">
+      <h1>{area.title}</h1>
+      <p class="lede">{area.lede}</p>
+    </header>
+
+    {
+      area.story && area.story.map((beat) => {
+        const hasMedia = Boolean(beat.film || beat.still || (beat.stills && beat.stills.length));
+        const wideMedia = Boolean(beat.stills && beat.stills.length > 1);
+        return (
+        <section class:list={["story", { split: hasMedia && !wideMedia, wide: wideMedia }]}>
+          <div class="story-copy">
+            <h2>{beat.heading}</h2>
+            {beat.take && <p class="take">{beat.take}</p>}
+            {beat.stats && beat.stats.length > 0 && (
+              <dl class="stats">
+                {beat.stats.map((stat) => (
+                  <div>
+                    <dt>{stat.value}</dt>
+                    <dd>{stat.label}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {beat.paras?.map((para) => (
+              <p>{para}</p>
+            ))}
+            {beat.points && beat.points.length > 0 && (
+              <ul class="points">
+                {beat.points.map((point) => (
+                  <li>{point}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {beat.film && (
+            <figure class="story-media">
+              <div class="stage-frame">
+                {beat.film.src.endsWith(".mp4") ? (
+                  <video class="clip" src={beat.film.src} poster={beat.film.poster} data-still={beat.film.poster} autoplay muted loop playsinline preload="metadata" width="1280" height="720"></video>
+                ) : (
+                  <img class="clip" src={beat.film.src} data-still={beat.film.poster} alt="" width="960" height="540" loading="lazy" decoding="async" />
+                )}
+              </div>
+              <figcaption>{beat.film.caption}</figcaption>
+            </figure>
+          )}
+          {beat.still && (
+            <figure class="story-media">
+              <img src={beat.still.src} alt={beat.still.alt} width="1200" height="800" loading="lazy" decoding="async" />
+              <figcaption>{beat.still.caption}</figcaption>
+            </figure>
+          )}
+          {beat.stills && beat.stills.length > 0 && (
+            <div class:list={["story-media-grid", { two: beat.stills.length === 2 }]}>
+              {beat.stills.map((shot) => (
+                <figure class="story-media">
+                  <img src={shot.src} alt={shot.alt} width="1200" height="800" loading="lazy" decoding="async" />
+                  <figcaption>{shot.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+        </section>
+        );
+      })
+    }
+
+    {
+      area.cites && area.cites.length > 0 && (
+        <section class="story cites">
+          <h2>Papers</h2>
+          <ul>
+            {area.cites.map((cite) => (
+              <li>
+                {cite.href ? (
+                  <a href={cite.href}>{cite.title}</a>
+                ) : (
+                  <span class="cite-title">{cite.title}</span>
+                )}
+                <p class="meta">
+                  {cite.meta}
+                  {cite.note ? ` · ${cite.note}` : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )
+    }
+
+    {
+      (area.blocks ?? []).map((block) => (
+        <section class="study">
+          <div class="study-head">
+            <h2>{block.title}</h2>
+            {block.href && (
+              <a class="ext" href={block.href} aria-label={`${block.title}, full paper`}>
+                <svg viewBox="0 0 18 18" width="18" height="18" aria-hidden="true">
+                  <path d="M5 13V5h5M10 5h3v3M13 5 7.5 10.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+              </a>
+            )}
+          </div>
+          {block.meta && <p class="meta">{block.meta}</p>}
+          {block.note && <span class="note">{block.note}</span>}
+          <p>{block.text}</p>
+          {block.films && block.films.length > 0 && (
+            <div class:list={["films", { two: block.films.length === 2 }]}>
+              {block.films.map((film) => (
+                <figure>
+                  <div class="stage-frame">
+                    {film.src.endsWith(".mp4") ? (
+                      <video class="clip" src={film.src} poster={film.poster} data-still={film.poster} autoplay muted loop playsinline preload="metadata" width="1280" height="720"></video>
+                    ) : (
+                      <img class="clip" src={film.src} data-still={film.poster} alt="" width="960" height="540" loading="lazy" decoding="async" />
+                    )}
+                  </div>
+                  <figcaption>{film.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+          {block.stills && block.stills.length > 0 && (
+            <div class:list={["stills", { two: block.stills.length > 1 }]}>
+              {block.stills.map((shot) => (
+                <figure>
+                  <img src={shot.src} alt={shot.alt} width="1200" height="800" loading="lazy" decoding="async" />
+                  <figcaption>{shot.caption}</figcaption>
+                </figure>
+              ))}
+            </div>
+          )}
+        </section>
+      ))
+    }
+
+    <nav class="area-links" aria-label="Other research">
+      {
+        others.map((item) => (
+          <a class="chip" href={`/research/${item.slug}`}>{item.title}</a>
+        ))
+      }
+      {showAir && area.slug !== "air-mobility" && <a class="chip" href="/research/air-mobility">Advanced air mobility</a>}
+    </nav>
+  </main>
+</Base>

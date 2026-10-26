@@ -1,0 +1,116 @@
+---
+import "../styles/global.css";
+import { nav, profile } from "../data/profile";
+
+const { title, description } = Astro.props;
+const path = Astro.url.pathname.replace(/\/$/, "") || "/";
+const current = (href: string) => path === href;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <script is:inline>
+      try {
+        if (localStorage.getItem("theme") === "dark") {
+          document.documentElement.dataset.theme = "dark";
+        }
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="bar">
+      <a class="wordmark" href="/">{profile.name}</a>
+      <nav class="bar-links" aria-label="Primary">
+        {
+          nav.map((item) => (
+            <a href={item.href} aria-current={current(item.href) ? "page" : undefined}>
+              {item.label}
+            </a>
+          ))
+        }
+      </nav>
+      <div class="bar-tools">
+        <div class="bar-end">
+          <a class="btn" href="/contact">Contact</a>
+        </div>
+        <button class="theme" type="button" aria-pressed="false" aria-label="Switch to dark mode">Dark</button>
+        <span class="menu-slot">
+          <input id="nav-toggle" class="nav-toggle" type="checkbox" aria-controls="mobile-nav" />
+          <label class="nav-toggle-label" for="nav-toggle">Menu</label>
+        </span>
+      </div>
+    </header>
+    <nav id="mobile-nav" class="mobile-panel" aria-label="Mobile">
+      {
+        nav.map((item) => (
+          <a href={item.href} aria-current={current(item.href) ? "page" : undefined}>
+            {item.label}
+          </a>
+        ))
+      }
+      <a href={`mailto:${profile.email}`}>Email</a>
+      <a href="/contact">Contact</a>
+      <a href={profile.scholar}>Google Scholar</a>
+      <a href={profile.linkedin}>LinkedIn</a>
+      <a href={profile.cv}>CV</a>
+    </nav>
+    <slot />
+    <footer class="foot">
+      <div class="foot-grid">
+        <div>
+          <p class="foot-label">Work</p>
+          <a href="/papers">Publications</a>
+          <a href="/projects">Projects</a>
+          <a href="/talks">Talks</a>
+          <a href="/demos">Demos</a>
+        </div>
+        <div>
+          <p class="foot-label">Connect</p>
+          <a href={profile.scholar} rel="me">Google Scholar</a>
+          <a href={profile.linkedin} rel="me">LinkedIn</a>
+          <a href={`mailto:${profile.email}`}>Email</a>
+          <a href={profile.cv}>CV</a>
+        </div>
+        <div>
+          <p class="foot-label">Place</p>
+          <p>{profile.location}</p>
+          <p>University of British Columbia</p>
+        </div>
+      </div>
+      <p class="fine">Tarek Ghoul</p>
+    </footer>
+    <script is:inline>
+      const themeButton = document.querySelector(".theme");
+      const paint = () => {
+        const dark = document.documentElement.dataset.theme === "dark";
+        if (!themeButton) return;
+        themeButton.textContent = dark ? "Light" : "Dark";
+        themeButton.setAttribute("aria-pressed", dark ? "true" : "false");
+        themeButton.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+      };
+      themeButton?.addEventListener("click", () => {
+        const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+        if (next === "dark") document.documentElement.dataset.theme = "dark";
+        else delete document.documentElement.dataset.theme;
+        try { localStorage.setItem("theme", next); } catch (e) {}
+        paint();
+      });
+      paint();
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        document.querySelectorAll("img.clip").forEach((img) => {
+          const still = img.getAttribute("data-still");
+          if (still) img.setAttribute("src", still);
+        });
+        document.querySelectorAll("video.clip").forEach((video) => {
+          video.removeAttribute("autoplay");
+          video.pause();
+        });
+      }
+    </script>
+  </body>
+</html>

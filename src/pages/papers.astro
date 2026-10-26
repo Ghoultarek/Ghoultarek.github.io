@@ -1,0 +1,43 @@
+---
+import Base from "../layouts/Base.astro";
+import { papers, profile } from "../data/profile";
+---
+<Base title="Publications — Tarek Ghoul" description="Publications by Tarek Ghoul.">
+  <main id="main" class="wrap">
+    <header class="page-title">
+      <h1>Publications</h1>
+      <p class="lede">
+        Journal articles, conference papers, and theses.
+      </p>
+      <div class="actions">
+        <a class="btn" href={profile.scholar}>Google Scholar</a>
+      </div>
+    </header>
+    {
+      papers.map((group) => (
+        <section class="group" id={group.id}>
+          <h2>{group.heading}</h2>
+          {group.items.map((paper) => {
+            const inner = (
+              <>
+                <div class="year">{paper.year}</div>
+                <div>
+                  <h3>{paper.title}</h3>
+                  <p class="meta">
+                    {paper.authors} ({paper.year}). <em>{paper.venue}</em>
+                    {paper.detail ? `, ${paper.detail}` : ""}.
+                  </p>
+                </div>
+              </>
+            );
+            return paper.href ? (
+              <a class="row" href={paper.href}>{inner}</a>
+            ) : (
+              <article class="row">{inner}</article>
+            );
+          })}
+        </section>
+      ))
+    }
+  </main>
+</Base>

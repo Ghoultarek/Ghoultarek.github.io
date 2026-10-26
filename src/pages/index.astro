@@ -1,0 +1,75 @@
+---
+import Base from "../layouts/Base.astro";
+import { interests, news, profile } from "../data/profile";
+---
+<Base
+  title="Tarek Ghoul"
+  description="Tarek Ghoul, postdoctoral researcher at UBC. Real-time crash risk for routes, signals, and perception."
+>
+  <main id="main" class="wrap">
+    <div class="wash">
+      <img class="clip" src="/research/athens.gif" data-still="/research/athens.jpg" alt="" width="960" height="540" />
+    </div>
+    <section class="hero">
+      <div>
+        <h1>Tarek Ghoul</h1>
+        <p class="lede">
+          I am a researcher that focuses on predicting crashes before they happen and developing various Intelligent Transportation Systems to improve road safety.
+          My research applies reinforcement learning, computer vision, world models, and extreme value modeling to prevent crashes and save lives.
+        </p>
+        <p class="role">Postdoctoral Researcher, University of British Columbia</p>
+        <div class="actions">
+          <a class="btn" href={profile.cv}>CV</a>
+          <a class="chip" href={profile.scholar} rel="me">Google Scholar</a>
+          <a class="chip" href={profile.linkedin} rel="me">LinkedIn</a>
+          <a class="chip" href={`mailto:${profile.email}`}>Email</a>
+        </div>
+      </div>
+      <figure class="portrait">
+        <img src="/portrait.jpg" width="256" height="254" alt="Tarek Ghoul" />
+      </figure>
+    </section>
+
+    <section class="block" aria-labelledby="research">
+      <h2 id="research">Research areas</h2>
+      <p class="hint">Click on a topic to learn more</p>
+      <div class="cards">
+        {
+          interests.map((item) => (
+            <a class="card" href={item.href}>
+              <div class="card-media">
+                {item.media.endsWith(".mp4") ? (
+                  <video class="clip" src={item.media} poster={item.poster} data-still={item.poster} autoplay muted loop playsinline preload="metadata" width="1600" height="900"></video>
+                ) : (
+                  <img class="clip" src={item.media} data-still={item.poster} alt="" width="640" height="360" />
+                )}
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </a>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="news">
+      <h2 id="news">Recent news</h2>
+      <div class="news">
+        {
+          news.map((item) => (
+            <article>
+              <a href={item.href} rel="noreferrer">
+                <img src={item.image} alt="" width="960" height="540" loading="lazy" decoding="async" />
+                <div>
+                  <time>{item.when}</time>
+                  <h3>{item.title}</h3>
+                  <p>{item.text}</p>
+                </div>
+              </a>
+            </article>
+          ))
+        }
+      </div>
+    </section>
+  </main>
+</Base>
