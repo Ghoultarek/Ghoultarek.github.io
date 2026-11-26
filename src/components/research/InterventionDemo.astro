@@ -1,0 +1,200 @@
+<section class="levers intervene" id="intervene" aria-labelledby="intervene-title">
+  <div class="levers-head">
+    <p class="kicker">Infrastructure investment decisions</p>
+    <h2 id="intervene-title">What if we built it?</h2>
+    <p>
+      Agencies judge a treatment by results borrowed from other sites. The goal: a model that <strong>learns how infrastructure shapes
+      behaviour</strong> and <strong>predicts</strong> the effect at this site, before building. Pick a treatment, then compare before and after.
+    </p>
+  </div>
+  <div class="intervene-body">
+    <div class="intervene-top">
+      <div class="seg" role="radiogroup" aria-label="Treatment">
+        <button type="button" role="radio" data-opt="bulb" aria-checked="true">Curb bulges</button>
+        <button type="button" role="radio" data-opt="bike" aria-checked="false">Protected bike lane</button>
+        <button type="button" role="radio" data-opt="friction" aria-checked="false">High-friction surface</button>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Before or after">
+        <button type="button" role="radio" data-when="before" aria-checked="true">Before</button>
+        <button type="button" role="radio" data-when="after" aria-checked="false">After</button>
+      </div>
+      <button type="button" class="chip replay" data-replay>Replay</button>
+    </div>
+    <div class="intervene-main">
+    <canvas class="intervene-canvas" data-canvas role="img" aria-labelledby="intervene-cap"></canvas>
+    <div class="intervene-cols">
+      <div>
+        <h3>Predicted outcome</h3>
+        <dl class="readouts" data-readouts></dl>
+      </div>
+      <div>
+        <h3>What the learned model adds</h3>
+        <p class="intervene-q" data-q></p>
+      </div>
+    </div>
+    </div>
+    <p class="demo-note" id="intervene-cap">
+      Stand-in model: turning speed follows the corner radius, and drivers yield only if they see the person in time. Illustrative street.
+    </p>
+  </div>
+</section>
+
+<script>
+  import { scenario, CX, CY } from "../../lib/whatif.js";
+
+  const TEXT: Record<string, { q: string }> = {
+    bulb: { q: "How often drivers really yield here, and where they look as they turn." },
+    bike: { q: "How many people ride this corridor, and whether turning drivers check for them." },
+    friction: { q: "Whether drivers speed up on the grippier surface and give the gain back." },
+  };
+  const C = { bg: "#3b3b3b", road: "#1a1a1a", park: "#262626", bike: "#1f5c3a", hfst: "#7a3d2c", line: "#bbbbbb", car: "#e8e8e8", parked: "#5a5a5a",
+    ped: "#6ea2ff", cyc: "#2ee6c8", red: "#ff6b6e", green: "#3ccf7a", text: "#e8e8e8" };
+  const WX = 92, WY = 46;
+
+  const root = document.getElementById("intervene")!;
+  const canvas = root.querySelector<HTMLCanvasElement>("[data-canvas]")!;
+  const opts = [...root.querySelectorAll<HTMLButtonElement>("[data-opt]")];
+  const whens = [...root.querySelectorAll<HTMLButtonElement>("[data-when]")];
+  let name = "bulb", after = false, res: any = null, start = 0, k = 1, dpr = 1;
+
+  const S = (v: number) => v * k;
+  function rect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string) { ctx.fillStyle = fill; ctx.fillRect(S(x), S(y), S(w), S(h)); }
+  function vehicle(ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, L: number, Wd: number, fill: string) {
+    ctx.save(); ctx.translate(S(x), S(y)); ctx.rotate(ang); ctx.fillStyle = fill; ctx.fillRect(S(-L / 2), S(-Wd / 2), S(L), S(Wd)); ctx.restore();
+  }
+  function corner(ctx: CanvasRenderingContext2D, x: number, y: number, sx: number, sy: number, r: number) {
+    // Round the sidewalk corner at (x, y) into the road quadrant (sx, sy): fill the road, then a sidewalk circle.
+    rect(ctx, sx < 0 ? x - r : x, sy < 0 ? y - r : y, r, r, C.road);
+    ctx.fillStyle = C.bg; ctx.beginPath(); ctx.arc(S(x + sx * r), S(y + sy * r), S(r), 0, Math.PI * 2); ctx.fill();
+  }
+  function zebra(ctx: CanvasRenderingContext2D, x0: number, x1: number, y: number, horizontal = true) {
+    ctx.fillStyle = "rgba(232,232,232,0.85)";
+    if (horizontal) for (let x = x0 + 0.3; x < x1 - 0.3; x += 1.2) ctx.fillRect(S(x), S(y - 1.4), S(0.6), S(2.8));
+    else for (let yy = x0 + 0.3; yy < x1 - 0.3; yy += 1.2) ctx.fillRect(S(y - 1.4), S(yy), S(2.8), S(0.6));
+  }
+  function label(ctx: CanvasRenderingContext2D, txt: string, x: number, y: number, col = C.text, bold = false) {
+    ctx.font = `${bold ? "bold " : ""}${13 * dpr}px Helvetica, Arial, sans-serif`; ctx.fillStyle = col; ctx.fillText(txt, S(x), S(y));
+  }
+
+  function drawStreet(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = C.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (name === "friction") {
+      rect(ctx, 0, CY - 7, WX, 14, C.road);
+      if (after) { rect(ctx, 0, CY + 3.5, 40, 3.5, C.hfst); label(ctx, "High-friction surface on the approach", 2, CY + 9.8, "#e0a48f"); }
+      else label(ctx, "Worn surface, wet", 2, CY + 9.8, "#b3b3b3");
+      ctx.strokeStyle = C.line; ctx.lineWidth = 1.5 * dpr; ctx.setLineDash([S(3), S(3)]);
+      for (const y of [CY - 3.5, CY + 3.5]) { ctx.beginPath(); ctx.moveTo(0, S(y)); ctx.lineTo(S(WX), S(y)); ctx.stroke(); }
+      ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(0, S(CY)); ctx.lineTo(S(WX), S(CY)); ctx.strokeStyle = "#d8b13a"; ctx.stroke();
+      zebra(ctx, CY - 7, CY + 7, 4 + 32 + 2.5, false);
+      return;
+    }
+    const park = name === "bulb" ? 2.5 : 0, bikeW = name === "bike" ? 1.8 : 0, edge = 7 + park + bikeW;
+    // Roads: main street east-west, cross street north-south.
+    rect(ctx, 0, CY - edge, WX, edge * 2, C.road);
+    rect(ctx, CX - 7 - park, 0, 14 + park * 2, WY, C.road);
+    if (park) {
+      rect(ctx, 0, CY - 9.5, WX, 2.5, C.park); rect(ctx, 0, CY + 7, WX, 2.5, C.park);
+      rect(ctx, CX - 9.5, 0, 2.5, WY, C.park); rect(ctx, CX + 7, 0, 2.5, WY, C.park);
+    }
+    if (bikeW) { rect(ctx, 0, CY + 7, CX - 7, 1.8, C.bike); rect(ctx, CX + 7, CY + 7, WX - CX - 7, 1.8, C.bike); }
+    // Corners.
+    const r = name === "bulb" ? (after ? 3 : 7) : after ? 3 : 6, cx0 = CX - 7 - park, cx1 = CX + 7 + park;
+    for (const [x, y, sx, sy] of [[cx0, CY - edge, -1, -1], [cx1, CY - edge, 1, -1], [cx0, CY + edge, -1, 1], [cx1, CY + edge, 1, 1]] as number[][]) corner(ctx, x, y, sx, sy, r);
+    // Curb bulges: the sidewalk takes over the parking lanes at the corners.
+    if (name === "bulb" && after) {
+      for (const [x, y, w, h] of [[CX - 17, CY + 7, 7.5, 2.5], [CX + 9.5, CY + 7, 7.5, 2.5], [CX - 17, CY - 9.5, 7.5, 2.5], [CX + 9.5, CY - 9.5, 7.5, 2.5],
+        [CX - 9.5, CY + 9.5, 2.5, 7], [CX + 7, CY + 9.5, 2.5, 7], [CX - 9.5, CY - 16.5, 2.5, 7], [CX + 7, CY - 16.5, 2.5, 7]]) {
+        ctx.fillStyle = C.bg; ctx.beginPath(); ctx.roundRect(S(x), S(y), S(w), S(h), S(1.2)); ctx.fill();
+      }
+      label(ctx, "Curb bulges", CX - 20, CY + 15.5, "#b3b3b3");
+    }
+    // Parked cars that block the view of a pedestrian waiting at the south-west corner.
+    if (name === "bulb") {
+      for (const y of after ? [CY + 19, CY + 25] : [CY + 13.8, CY + 19, CY + 25]) vehicle(ctx, CX - 8.25, y, Math.PI / 2, 4.5, 1.9, C.parked);
+      for (const x of [CX - 30, CX - 24, ...(after ? [] : [CX - 15])]) vehicle(ctx, x, CY + 8.25, 0, 4.5, 1.9, C.parked);
+    }
+    // Protected intersection: bike lane bends behind a corner island and crosses the south leg set back.
+    if (name === "bike") {
+      if (after) {
+        ctx.strokeStyle = C.bike; ctx.lineWidth = S(1.8); ctx.beginPath(); ctx.moveTo(S(CX - 14), S(CY + 7.9)); ctx.quadraticCurveTo(S(CX - 9), S(CY + 7.9), S(CX - 9), S(CY + 12)); ctx.lineTo(S(CX + 9), S(CY + 12)); ctx.quadraticCurveTo(S(CX + 9), S(CY + 7.9), S(CX + 14), S(CY + 7.9)); ctx.stroke();
+        ctx.fillStyle = "#6a6a6a"; ctx.beginPath(); ctx.roundRect(S(CX - 9.6), S(CY + 7.3), S(2.4), S(2.8), S(0.8)); ctx.fill();
+        label(ctx, "Corner island", CX - 20, CY + 15.5, "#b3b3b3");
+      } else {
+        ctx.setLineDash([S(1), S(1)]); ctx.strokeStyle = C.bike; ctx.lineWidth = S(1.8); ctx.beginPath(); ctx.moveTo(S(CX - 7), S(CY + 7.9)); ctx.lineTo(S(CX + 7), S(CY + 7.9)); ctx.stroke(); ctx.setLineDash([]);
+        label(ctx, "Painted bike lane", 2, CY + 11.5, "#8fd1a8");
+      }
+    }
+    // Lane lines and centre line on both streets.
+    ctx.strokeStyle = C.line; ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([S(2.5), S(2.5)]);
+    for (const y of [CY - 3.5, CY + 3.5]) { ctx.beginPath(); ctx.moveTo(0, S(y)); ctx.lineTo(S(CX - 10), S(y)); ctx.moveTo(S(CX + 10), S(y)); ctx.lineTo(S(WX), S(y)); ctx.stroke(); }
+    for (const x of [CX - 3.5, CX + 3.5]) { ctx.beginPath(); ctx.moveTo(S(x), 0); ctx.lineTo(S(x), S(CY - 10)); ctx.moveTo(S(x), S(CY + 13)); ctx.lineTo(S(x), S(WY)); ctx.stroke(); }
+    ctx.setLineDash([]);
+    // Crosswalk on the south leg: the one a right-turning driver crosses, with the pedestrian on the driver's right.
+    if (name === "bulb") zebra(ctx, after ? CX - 7 : CX - 9.5, after ? CX + 7 : CX + 9.5, CY + 12);
+  }
+
+  function frame(now: number) {
+    const ctx = canvas.getContext("2d")!;
+    drawStreet(ctx);
+    if (!res) return;
+    if (name === "friction") {
+      const tr = res.traj, n = Math.min(tr.length - 1, Math.max(0, Math.floor(((now - start) / 1000) / 0.05)));
+      const [tt, x, v, pedRel] = tr[n];
+      vehicle(ctx, 4 + x - 2.25, CY + 5.25, 0, 4.5, 1.9, C.car);
+      ctx.fillStyle = C.ped; ctx.beginPath(); ctx.arc(S(38.5), S(CY + Math.max(-7, pedRel)), S(0.55), 0, Math.PI * 2); ctx.fill();
+      // Reaction and braking distances drawn under the lane.
+      ctx.fillStyle = "rgba(255,197,61,0.8)"; ctx.fillRect(S(4), S(CY + 7.6), S(res.react_d), S(0.5));
+      ctx.fillStyle = "rgba(255,107,110,0.8)"; ctx.fillRect(S(4 + res.react_d), S(CY + 7.6), S(res.brake_d), S(0.5));
+      label(ctx, `reaction ${res.react_d.toFixed(0)} m + braking ${res.brake_d.toFixed(0)} m`, 4, CY + 12.5, "#e8e8e8");
+      label(ctx, `${(v * 3.6).toFixed(0)} km/h`, 4 + x - 4, CY + 2.8, "#e8e8e8", true);
+      if (tt > 2.2) label(ctx, res.impact ? `Reaches the pedestrian at ${(res.impact * 3.6).toFixed(0)} km/h` : `Stops ${res.stopsShort.toFixed(1)} m short`, 46, CY - 9.5, res.impact ? C.red : C.green, true);
+      if (now - start < 7000) requestAnimationFrame(frame); else { start = now; requestAnimationFrame(frame); }
+      return;
+    }
+    const car = res.car, usr = res.user, n = Math.min(car.length - 1, Math.max(0, Math.floor(((now - start) / 1000) / 0.05)));
+    // Path of the turning car, faint.
+    ctx.strokeStyle = "rgba(255,197,61,0.45)"; ctx.lineWidth = 1.5 * dpr; ctx.setLineDash([S(1), S(1.2)]);
+    ctx.beginPath(); res.path.pts.forEach((p: number[], i: number) => (i ? ctx.lineTo(S(p[0]), S(p[1])) : ctx.moveTo(S(p[0]), S(p[1])))); ctx.stroke(); ctx.setLineDash([]);
+    const [, x, y] = car[n], [, px, py] = car[Math.max(0, n - 2)];
+    const ang = Math.hypot(x - px, y - py) > 0.01 ? Math.atan2(y - py, x - px) : n > 0 ? (ctx as any).__ang ?? 0 : 0;
+    (ctx as any).__ang = ang;
+    const [, ux, uy] = usr[n], [, ux0, uy0] = usr[Math.max(0, n - 2)];
+    if (name === "bike") vehicle(ctx, ux, uy, Math.atan2(uy - uy0, ux - ux0 || 1e-6), 1.8, 0.6, C.cyc); else { ctx.fillStyle = C.ped; ctx.beginPath(); ctx.arc(S(ux), S(uy), S(0.55), 0, Math.PI * 2); ctx.fill(); }
+    vehicle(ctx, x, y, ang, 4.5, 1.9, C.car);
+    const tt = car[n][0];
+    const done = res.yielded ? tt > 6 : tt > 7.5;
+    if (done) {
+      const ok = res.yielded;
+      label(ctx, ok ? "Driver sees them and yields" : "Driver sees them too late: near miss", 2, 4, ok ? C.green : C.red, true);
+    }
+    if (now - start < (car.length * 50) + 1500) requestAnimationFrame(frame); else { start = now; requestAnimationFrame(frame); }
+  }
+
+  function readouts() {
+    const rows: [string, string][] = name === "friction"
+      ? [["Wet-road friction", after ? "0.75, treated" : "0.35, worn"], ["Stopping distance at 50 km/h", `${res.stop.toFixed(0)} m (pedestrian 32 m ahead)`],
+         ["Outcome", res.impact ? `Hits pedestrian at ${(res.impact * 3.6).toFixed(0)} km/h` : `Stops ${res.stopsShort.toFixed(1)} m short`]]
+      : [["Turn speed", `${(res.vTurn * 3.6).toFixed(0)} km/h`],
+         [name === "bulb" ? "Pedestrian crossing" : "Bike crossing", name === "bulb" ? `${res.crossing} m, ${after ? "visible on the bulb" : "hidden by parked cars"}` : after ? "set back, in view" : "in the blind spot"],
+         ["Outcome", res.yielded ? `Driver yields (PET ${res.pet.toFixed(1)} s)` : `Near miss (PET ${res.pet.toFixed(1)} s)`]];
+    root.querySelector("[data-readouts]")!.innerHTML = rows.map(([a, b]) => `<div><dt>${a}</dt><dd>${b}</dd></div>`).join("");
+    root.querySelector("[data-q]")!.textContent = TEXT[name].q;
+  }
+
+  function run() {
+    res = scenario(name, after);
+    opts.forEach((b) => b.setAttribute("aria-checked", String(b.dataset.opt === name)));
+    whens.forEach((b) => b.setAttribute("aria-checked", String((b.dataset.when === "after") === after)));
+    readouts(); start = performance.now();
+  }
+  function size() {
+    dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth; canvas.style.height = `${Math.round((w * WY) / WX)}px`;
+    canvas.width = Math.round(w * dpr); canvas.height = Math.round(((w * WY) / WX) * dpr); k = canvas.width / WX;
+  }
+  opts.forEach((b) => b.addEventListener("click", () => { name = b.dataset.opt!; after = false; run(); }));
+  whens.forEach((b) => b.addEventListener("click", () => { after = b.dataset.when === "after"; run(); }));
+  root.querySelector("[data-replay]")!.addEventListener("click", () => (start = performance.now()));
+  new ResizeObserver(size).observe(canvas);
+  size(); run(); requestAnimationFrame(frame);
+</script>

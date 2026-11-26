@@ -1,0 +1,52 @@
+---
+import Base from "../layouts/Base.astro";
+import { funding, awards, service, profile } from "../data/profile";
+---
+<Base title="Awards and service — Tarek Ghoul" description="Funding, awards, and service of Tarek Ghoul.">
+  <main id="main" class="wrap">
+    <header class="page-title">
+      <h1>Awards and service</h1>
+      <p class="lede">Funding, awards, and service, as listed on my academic CV.</p>
+      <div class="actions">
+        <a class="btn" href={profile.cv}>Academic CV</a>
+      </div>
+    </header>
+
+
+    <section class="group" aria-labelledby="funding">
+      <h2 id="funding">Funding</h2>
+      {
+        funding.map((f) => (
+          <article class="row">
+            <div class="year">{f.year}</div>
+            <div><h3>{f.title}</h3><p>{f.text}</p></div>
+          </article>
+        ))
+      }
+    </section>
+
+    <section class="group" aria-labelledby="awards">
+      <h2 id="awards">Awards</h2>
+      {
+        awards.map((a) => (
+          <article class="row">
+            <div class="year">{a.year}</div>
+            <div><h3>{a.title}</h3></div>
+          </article>
+        ))
+      }
+    </section>
+
+    <section class="group" aria-labelledby="service">
+      <h2 id="service">Service and leadership</h2>
+      {
+        service.map((s) => (
+          <article class="row">
+            <div class="year">{s.year}</div>
+            <div><h3>{s.title}</h3></div>
+          </article>
+        ))
+      }
+    </section>
+  </main>
+</Base>

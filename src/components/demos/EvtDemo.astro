@@ -1,0 +1,190 @@
+<section class="demo" id="evt" aria-labelledby="evt-title">
+  <div class="demo-head">
+    <h2 id="evt-title">Average risk hides the peaks</h2>
+    <p>
+      Twelve intersections, observed from 07:00 to 19:00 in 20-minute intervals. In each interval, an
+      extreme-value (GEV) model is fitted to the most severe conflicts. Crash risk is the probability that the tail
+      reaches a collision (TTC = 0). Move the threshold and compare how many sites look hazardous on their
+      <em>average</em> risk with how many cross it during a <em>peak</em>. Select any cell to see its fitted tail.
+    </p>
+  </div>
+  <div class="demo-body evt-grid">
+    <div>
+      <canvas class="demo-canvas evt-heat" data-heat tabindex="0" role="img"
+        aria-label="Heatmap of crash risk by site and time of day. Use arrow keys to move the selection."></canvas>
+      <div class="demo-controls">
+        <label>Hazard threshold <output data-out="thr"></output><input type="range" data-in="thr" min="-5" max="-1" value="-3" step="0.1" /></label>
+        <div class="demo-buttons"><button class="chip" type="button" data-resample>New sample</button></div>
+      </div>
+      <dl class="readouts">
+        <div><dt>Hazardous on average risk</dt><dd data-r="avg">–</dd></div>
+        <div><dt>Hazardous at a peak</dt><dd data-r="peak">–</dd></div>
+      </dl>
+    </div>
+    <div>
+      <canvas class="demo-canvas evt-fit" data-fit role="img" aria-label="Histogram of interval maxima with the fitted GEV density"></canvas>
+      <dl class="readouts" aria-live="polite">
+        <div><dt>Selected</dt><dd data-r="cell">–</dd></div>
+        <div><dt>Crash risk</dt><dd data-r="risk">–</dd></div>
+        <div><dt>Shape k</dt><dd data-r="k">–</dd></div>
+      </dl>
+    </div>
+    <p class="demo-note">
+      Synthetic data drawn from known GEV parameters and refitted by L-moments in your browser. The published Athens study
+      found 2 of 47 locations hazardous on average risk and 38 once short-term peaks were included; this demo shows the
+      mechanism, not that dataset.
+    </p>
+  </div>
+</section>
+
+<script>
+  import { rng, gevSample, gevFit, gevPdf, crashRisk } from "../../lib/demo-math.js";
+
+  const root = document.getElementById("evt")!;
+  const heat = root.querySelector<HTMLCanvasElement>("[data-heat]")!;
+  const fitC = root.querySelector<HTMLCanvasElement>("[data-fit]")!;
+  const thrIn = root.querySelector<HTMLInputElement>('[data-in="thr"]')!;
+  const read = (k: string) => root.querySelector<HTMLElement>(`[data-r="${k}"]`)!;
+  const SITES = 12, SLOTS = 36, N = 20;
+  type Fit = { xi: number; alpha: number; k: number };
+  let cells: { data: number[]; fit: Fit; risk: number }[][] = [];
+  let sel = { s: 0, t: 0 };
+  let seed = 11;
+
+  const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const clock = (t: number) => { const m = 7 * 60 + t * 20; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+  const pct = (r: number) => (r === 0 ? "0" : r < 1e-4 ? "<0.01%" : `${(r * 100).toFixed(r < 0.01 ? 2 : 1)}%`);
+
+  function generate() {
+    const r = rng(seed);
+    cells = [];
+    for (let s = 0; s < SITES; s++) {
+      // Most sites are calm on average; most get one or two short peaks (rush hour, a school release, an event).
+      const base = -1.75 + r() * 0.35;
+      const peaks = Array.from({ length: r() < 0.85 ? 1 + Math.floor(r() * 2) : 0 }, () => ({ at: Math.floor(r() * SLOTS), w: 1 + r() * 1.5, h: 0.6 + r() * 0.5 }));
+      const row = [];
+      for (let t = 0; t < SLOTS; t++) {
+        const bump = peaks.reduce((a, p) => a + p.h * Math.exp(-(((t - p.at) / p.w) ** 2)), 0);
+        const truth = { xi: base + bump, alpha: 0.28, k: 0.3 };
+        const data = Array.from({ length: N }, () => gevSample(r, truth));
+        const fit = gevFit(data);
+        row.push({ data, fit, risk: crashRisk(fit) });
+      }
+      cells.push(row);
+    }
+  }
+
+  function fitCanvas(c: HTMLCanvasElement) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  const layout = (w: number, h: number) => ({ x0: 30, y0: 6, cw: (w - 34) / SLOTS, ch: (h - 26) / SITES });
+
+  function render() {
+    const thr = Math.pow(10, +thrIn.value);
+    root.querySelector('[data-out="thr"]')!.textContent = pct(thr);
+    let avgCount = 0, peakCount = 0;
+    const { ctx, w, h } = fitCanvas(heat);
+    const L = layout(w, h);
+    const risk = css("--risk"), card = css("--card"), ink = css("--ink"), muted = css("--muted");
+    ctx.clearRect(0, 0, w, h);
+    ctx.font = "11px Helvetica, Arial, sans-serif";
+    for (let s = 0; s < SITES; s++) {
+      const row = cells[s];
+      const avg = row.reduce((a, c) => a + c.risk, 0) / SLOTS;
+      const peak = Math.max(...row.map((c) => c.risk));
+      if (avg > thr) avgCount++;
+      if (peak > thr) peakCount++;
+      ctx.fillStyle = peak > thr ? risk : muted;
+      ctx.fillText(`S${s + 1}`, 2, L.y0 + s * L.ch + L.ch * 0.65);
+      for (let t = 0; t < SLOTS; t++) {
+        const r = row[t].risk;
+        const x = L.x0 + t * L.cw, y = L.y0 + s * L.ch;
+        ctx.fillStyle = card;
+        ctx.fillRect(x, y, L.cw - 1, L.ch - 1);
+        if (r > 0) {
+          // Log scale from 1e-5 to 1e-1 for the fill strength.
+          ctx.globalAlpha = Math.min(1, Math.max(0.08, (Math.log10(r) + 5) / 4));
+          ctx.fillStyle = risk;
+          ctx.fillRect(x, y, L.cw - 1, L.ch - 1);
+          ctx.globalAlpha = 1;
+        }
+        if (r > thr) { ctx.strokeStyle = ink; ctx.lineWidth = 1; ctx.strokeRect(x + 0.5, y + 0.5, L.cw - 2, L.ch - 2); }
+      }
+    }
+    ctx.fillStyle = muted;
+    for (let t = 0; t <= SLOTS; t += 6) ctx.fillText(clock(t).replace(":00", "h"), L.x0 + t * L.cw - 8, h - 6);
+    ctx.strokeStyle = ink; ctx.lineWidth = 2;
+    ctx.strokeRect(L.x0 + sel.t * L.cw - 1, L.y0 + sel.s * L.ch - 1, L.cw + 1, L.ch + 1);
+    read("avg").textContent = `${avgCount} of ${SITES}`;
+    read("peak").textContent = `${peakCount} of ${SITES}`;
+    renderFit();
+  }
+
+  function renderFit() {
+    const c = cells[sel.s][sel.t];
+    const { ctx, w, h } = fitCanvas(fitC);
+    const ink = css("--ink"), muted = css("--muted"), risk = css("--risk"), line = css("--line"), card = css("--card-2");
+    const lo = -3, hi = 0.6, pad = 24;
+    const X = (v: number) => pad + ((v - lo) / (hi - lo)) * (w - pad - 8);
+    ctx.clearRect(0, 0, w, h);
+    const bins = 18, bw = (hi - lo) / bins;
+    const counts = new Array(bins).fill(0);
+    c.data.forEach((v) => { const i = Math.floor((v - lo) / bw); if (i >= 0 && i < bins) counts[i]++; });
+    const dens = counts.map((n) => n / (N * bw));
+    const xs = Array.from({ length: 200 }, (_, i) => lo + ((hi - lo) * i) / 199);
+    const ps = xs.map((x) => gevPdf(x, c.fit));
+    const ymax = Math.max(0.5, ...dens, ...ps) * 1.1;
+    const Y = (v: number) => h - 22 - (v / ymax) * (h - 34);
+    ctx.fillStyle = card;
+    dens.forEach((d, i) => ctx.fillRect(X(lo + i * bw) + 1, Y(d), X(lo + bw) - X(lo) - 2, Y(0) - Y(d)));
+    // Shade the tail beyond TTC = 0: that area is the crash risk.
+    ctx.fillStyle = risk; ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.moveTo(X(0), Y(0));
+    xs.forEach((x, i) => { if (x >= 0) ctx.lineTo(X(x), Y(ps[i])); });
+    ctx.lineTo(X(hi), Y(0)); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath();
+    xs.forEach((x, i) => (i ? ctx.lineTo(X(x), Y(ps[i])) : ctx.moveTo(X(x), Y(ps[i]))));
+    ctx.stroke();
+    ctx.strokeStyle = risk; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.moveTo(X(0), 8); ctx.lineTo(X(0), Y(0)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = line; ctx.beginPath(); ctx.moveTo(pad, Y(0)); ctx.lineTo(w - 8, Y(0)); ctx.stroke();
+    ctx.fillStyle = muted; ctx.font = "11px Helvetica, Arial, sans-serif";
+    for (let v = -3; v <= 0; v += 1) ctx.fillText(String(v), X(v) - 4, h - 6);
+    ctx.fillText("negated TTC (s) →", w - 110, h - 6);
+    ctx.fillStyle = risk; ctx.fillText("collision", X(0) + 4, 18);
+    read("cell").textContent = `Site S${sel.s + 1}, ${clock(sel.t)}`;
+    read("risk").textContent = pct(c.risk);
+    read("k").textContent = c.fit.k.toFixed(2);
+  }
+
+  function selectRiskiest() {
+    let best = { s: 0, t: 0, r: -1 };
+    cells.forEach((row, s) => row.forEach((c, t) => { if (c.risk > best.r) best = { s, t, r: c.risk }; }));
+    sel = { s: best.s, t: best.t };
+  }
+
+  heat.addEventListener("click", (e) => {
+    const rect = heat.getBoundingClientRect();
+    const L = layout(rect.width, rect.height);
+    const t = Math.floor((e.clientX - rect.left - L.x0) / L.cw), s = Math.floor((e.clientY - rect.top - L.y0) / L.ch);
+    if (t >= 0 && t < SLOTS && s >= 0 && s < SITES) { sel = { s, t }; render(); }
+  });
+  heat.addEventListener("keydown", (e) => {
+    const d: Record<string, [number, number]> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+    if (!d[e.key]) return;
+    e.preventDefault();
+    sel = { s: Math.min(SITES - 1, Math.max(0, sel.s + d[e.key][0])), t: Math.min(SLOTS - 1, Math.max(0, sel.t + d[e.key][1])) };
+    render();
+  });
+  thrIn.addEventListener("input", render);
+  root.querySelector("[data-resample]")!.addEventListener("click", () => { seed += 1; generate(); selectRiskiest(); render(); });
+  new ResizeObserver(() => render()).observe(heat);
+  new MutationObserver(() => render()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  generate();
+  selectRiskiest();
+  render();
+</script>

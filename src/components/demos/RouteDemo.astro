@@ -1,0 +1,151 @@
+<section class="demo" id="routes" aria-labelledby="routes-title">
+  <div class="demo-head">
+    <h2 id="routes-title">Safest route or fastest route?</h2>
+    <p>
+      Each road link has a travel time and a crash-risk rate that changes through the day. Exposure on a link is
+      its risk rate multiplied by the time spent on it. Slide from <em>fastest</em> to <em>safest</em> and watch
+      the route change. The dashed line stays on the fastest route for comparison. Click two intersections to set a new trip.
+    </p>
+  </div>
+  <div class="demo-body">
+    <canvas class="demo-canvas route-map" data-map role="img" aria-label="Road network coloured by crash risk, with the chosen and fastest routes"></canvas>
+    <div class="demo-controls">
+      <label>Objective <output data-out="w"></output><input type="range" data-in="w" min="0" max="1" value="0.6" step="0.05" /></label>
+      <label>Time of day <output data-out="tod"></output><input type="range" data-in="tod" min="6" max="20" value="8" step="0.25" /></label>
+    </div>
+    <dl class="readouts" aria-live="polite">
+      <div><dt>Travel time</dt><dd data-r="time">–</dd></div>
+      <div><dt>Risk exposure</dt><dd data-r="risk">–</dd></div>
+      <div><dt>Compared with fastest</dt><dd data-r="delta">–</dd></div>
+    </dl>
+    <p class="demo-note">
+      A synthetic grid, not a real city. In the published Athens study, safest routes carried about 22.8% less modelled
+      risk than fastest routes, which were about 11% quicker.
+    </p>
+  </div>
+</section>
+
+<script>
+  import { rng, shortestPath } from "../../lib/demo-math.js";
+
+  const root = document.getElementById("routes")!;
+  const map = root.querySelector<HTMLCanvasElement>("[data-map]")!;
+  const wIn = root.querySelector<HTMLInputElement>('[data-in="w"]')!;
+  const todIn = root.querySelector<HTMLInputElement>('[data-in="tod"]')!;
+  const read = (k: string) => root.querySelector<HTMLElement>(`[data-r="${k}"]`)!;
+  const COLS = 9, ROWS = 6;
+  const r = rng(2023);
+
+  type Edge = { to: number; from: number; t: number; base: number; peak: number; at: number; arterial: boolean };
+  const nodes = Array.from({ length: COLS * ROWS }, (_, i) => ({
+    x: (i % COLS) + (r() - 0.5) * 0.35, y: Math.floor(i / COLS) + (r() - 0.5) * 0.35,
+  }));
+  const adj: Edge[][] = nodes.map(() => []);
+  const arterialRow = 2, arterialCol = 4;
+  for (let i = 0; i < nodes.length; i++) {
+    const c = i % COLS, row = Math.floor(i / COLS);
+    const link = (j: number) => {
+      const arterial = (row === arterialRow && Math.floor(j / COLS) === arterialRow) || (c === arterialCol && j % COLS === arterialCol);
+      const len = Math.hypot(nodes[i].x - nodes[j].x, nodes[i].y - nodes[j].y);
+      // Arterials are faster but busier; local streets are slower and calmer, with a few risky hot spots.
+      const t = len * (arterial ? 0.55 : 1) * (0.9 + r() * 0.2);
+      const base = arterial ? 1.6 + r() * 0.6 : 0.5 + r() * 0.5 + (r() < 0.12 ? 1.5 : 0);
+      const e = { t, base, peak: 0.8 + r() * 1.6, at: r() < 0.5 ? 8 + r() : 16.5 + r() * 1.5, arterial };
+      adj[i].push({ ...e, from: i, to: j });
+      adj[j].push({ ...e, from: j, to: i });
+    };
+    if (c < COLS - 1) link(i + 1);
+    if (row < ROWS - 1) link(i + COLS);
+  }
+  let from = (ROWS - 1) * COLS, to = COLS - 1, pending: number | null = null;
+
+  const css = (n: string) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const rate = (e: Edge, tod: number) => e.base * (1 + e.peak * Math.exp(-(((tod - e.at) / 1.1) ** 2)));
+  const totals = (path: number[], tod: number) => {
+    let time = 0, risk = 0;
+    for (let i = 0; i < path.length - 1; i++) {
+      const e = adj[path[i]].find((x) => x.to === path[i + 1])!;
+      time += e.t; risk += rate(e, tod) * e.t;
+    }
+    return { time, risk };
+  };
+
+  function fitCanvas(c: HTMLCanvasElement) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+  const project = (w: number, h: number) => {
+    const s = Math.min((w - 40) / (COLS - 1), (h - 40) / (ROWS - 1));
+    const ox = (w - s * (COLS - 1)) / 2, oy = (h - s * (ROWS - 1)) / 2;
+    return { P: (n: { x: number; y: number }) => [ox + n.x * s, oy + n.y * s] as const, s };
+  };
+
+  function render() {
+    const w = +wIn.value, tod = +todIn.value;
+    root.querySelector('[data-out="w"]')!.textContent = w === 0 ? "fastest" : w === 1 ? "safest" : `${Math.round(w * 100)}% safety`;
+    root.querySelector('[data-out="tod"]')!.textContent = `${String(Math.floor(tod)).padStart(2, "0")}:${String(Math.round((tod % 1) * 60)).padStart(2, "0")}`;
+    // Normalise both objectives so the slider is a fair trade-off between them.
+    const all = adj.flat();
+    const tMean = all.reduce((a, e) => a + e.t, 0) / all.length;
+    const rMean = all.reduce((a, e) => a + rate(e, tod) * e.t, 0) / all.length;
+    const fastest = shortestPath(adj, from, to, (e: Edge) => e.t)!;
+    const chosen = shortestPath(adj, from, to, (e: Edge) => (1 - w) * (e.t / tMean) + w * ((rate(e, tod) * e.t) / rMean))!;
+
+    const { ctx, w: W, h: H } = fitCanvas(map);
+    const { P, s } = project(W, H);
+    const risk = css("--risk"), ink = css("--ink"), muted = css("--muted"), line = css("--line"), accent = css("--accent"), bg = css("--bg");
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineCap = "round";
+    for (const e of all) {
+      if (e.from > e.to) continue;
+      const [x1, y1] = P(nodes[e.from]), [x2, y2] = P(nodes[e.to]);
+      ctx.strokeStyle = line; ctx.lineWidth = e.arterial ? 9 : 6;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      ctx.strokeStyle = risk; ctx.globalAlpha = Math.min(1, rate(e, tod) / 5);
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    const drawPath = (p: number[], color: string, width: number, dash: number[]) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.setLineDash(dash); ctx.beginPath();
+      p.forEach((n, i) => { const [x, y] = P(nodes[n]); if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y); });
+      ctx.stroke(); ctx.setLineDash([]);
+    };
+    drawPath(fastest, ink, 2.5, [6, 6]);
+    drawPath(chosen, accent, 4, []);
+    nodes.forEach((n, i) => {
+      const [x, y] = P(n);
+      const end = i === from || i === to || i === pending;
+      ctx.fillStyle = end ? ink : bg; ctx.strokeStyle = muted; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, end ? Math.max(7, s * 0.09) : 3.5, 0, Math.PI * 2); ctx.fill(); if (!end) ctx.stroke();
+    });
+    ctx.fillStyle = ink; ctx.font = "bold 12px Helvetica, Arial, sans-serif";
+    const [ax, ay] = P(nodes[from]), [bx, by] = P(nodes[to]);
+    const label = (t: string, x: number, y: number) => ctx.fillText(t, x - 4, y < 24 ? y + 22 : y - 12);
+    label("A", ax, ay); label("B", bx, by);
+
+    const a = totals(chosen, tod), f = totals(fastest, tod);
+    const scale = 2.2; // minutes per grid unit, for readable numbers
+    read("time").textContent = `${(a.time * scale).toFixed(1)} min`;
+    read("risk").textContent = `${a.risk.toFixed(2)} units`;
+    const dt = ((a.time - f.time) / f.time) * 100, dr = ((a.risk - f.risk) / f.risk) * 100;
+    read("delta").textContent = Math.abs(dt) < 0.05 && Math.abs(dr) < 0.05 ? "same route" : `${dt >= 0 ? "+" : ""}${dt.toFixed(0)}% time, ${dr >= 0 ? "+" : ""}${dr.toFixed(0)}% risk`;
+  }
+
+  map.addEventListener("click", (e) => {
+    const rect = map.getBoundingClientRect();
+    const { P } = project(rect.width, rect.height);
+    let best = -1, bd = Infinity;
+    nodes.forEach((n, i) => { const [x, y] = P(n); const d = Math.hypot(x - (e.clientX - rect.left), y - (e.clientY - rect.top)); if (d < bd) { bd = d; best = i; } });
+    if (bd > 30) return;
+    if (pending === null) { pending = best; } else if (best !== pending) { from = pending; to = best; pending = null; }
+    render();
+  });
+  wIn.addEventListener("input", render);
+  todIn.addEventListener("input", render);
+  new ResizeObserver(render).observe(map);
+  new MutationObserver(render).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  render();
+</script>

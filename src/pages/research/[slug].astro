@@ -153,7 +153,7 @@ function marks(text: string) {
                 <figure>
                   <div class="stage-frame">
                     {film.src.endsWith(".mp4") ? (
-                      <video class="clip" src={film.src} poster={film.poster} data-still={film.poster} autoplay muted loop playsinline preload="metadata" width="1280" height="720"></video>
+                      <video src={film.src} poster={film.poster} controls playsinline preload="none" width="1280" height="720"></video>
                     ) : (
                       <img class="clip" src={film.src} data-still={film.poster} alt="" width="960" height="540" loading="lazy" decoding="async" />
                     )}

@@ -1,0 +1,49 @@
+---
+import Base from "../../layouts/Base.astro";
+import ResilienceCurve from "../../components/research/ResilienceCurve.astro";
+
+const themes = [
+  { title: "Natural hazards", text: "Earthquakes, floods, and evacuations: switch the network's levers to move people out and responders in, safely.", builds: "Network signal control, fleet routing" },
+  { title: "Safety as a recovery metric", text: "Detours push traffic onto streets not built for it. Track how crash risk falls and recovers, not just travel time.", builds: "Real-time crash-risk estimation and forecasting" },
+  { title: "Weather and climate", text: "Rain, snow, and heat change how people drive. Adapt operations before conditions turn dangerous.", builds: "Extreme-value conflict models" },
+  { title: "Asset condition", text: "Faded markings and worn pavement change behaviour long before crashes show it. Rank maintenance by the risk it removes.", builds: "Pavement-marking evaluation, world models" },
+  { title: "The most exposed", text: "Pedestrians, cyclists, and small communities carry the most risk and have the least data. Bring them low-cost, camera-based tools.", builds: "BC passing-distance law, rural Indigenous safety audit" },
+];
+---
+<Base title="Resilience — Tarek Ghoul" description="Future work on keeping road networks safe and moving through earthquakes, floods, storms, and incidents.">
+  <main id="main" class="wrap dm">
+    <header class="page-title">
+      <p class="kicker">Research direction · future work</p>
+      <h1>Resilience</h1>
+      <p class="lede">
+        How do we keep people safe and moving when an earthquake, flood, storm, or crash disrupts the network, and how fast does it recover?
+      </p>
+    </header>
+
+    <ResilienceCurve />
+
+    <section class="levers" aria-labelledby="themes-title">
+      <div class="levers-head">
+        <p class="kicker">Directions</p>
+        <h2 id="themes-title">Five threads</h2>
+      </div>
+      <ol class="stack-list themes-list">
+        {themes.map((t) => (
+          <li>
+            <span class="lever-tag">Future work</span>
+            <h3>{t.title}</h3>
+            <p>{t.text}</p>
+            <p class="builds"><strong>Builds on:</strong> {t.builds}</p>
+          </li>
+        ))}
+      </ol>
+    </section>
+
+    <nav class="area-links" aria-label="Other research">
+      <a class="chip" href="/research/decision-making">Decision-making for Infrastructure</a>
+      <a class="chip" href="/research/crash-risk">Real-time Crash Risk Estimation</a>
+      <a class="chip" href="/research/signals">Signal Optimization</a>
+      <a class="chip" href="/research/routes">Routing & Navigation</a>
+    </nav>
+  </main>
+</Base>

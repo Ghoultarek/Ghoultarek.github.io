@@ -1,0 +1,89 @@
+<section class="levers" id="curve" aria-labelledby="curve-title">
+  <div class="levers-head">
+    <p class="kicker">The question</p>
+    <h2 id="curve-title">How far does it fall, and how fast does it recover?</h2>
+    <p>Performance drops when a disruption hits, then recovers. The shaded area is the cost to travellers. Pick a disruption and add responses.</p>
+  </div>
+  <div class="intervene-body">
+    <div class="curve-controls">
+      <label>Disruption
+        <select data-hazard>
+          <option value="quake">Earthquake</option>
+          <option value="flood">Flood</option>
+          <option value="storm">Winter storm</option>
+          <option value="incident" selected>Major incident</option>
+        </select>
+      </label>
+      <fieldset>
+        <legend>Responses</legend>
+        <label><input type="checkbox" data-r="plan" /> Plan with a world model</label>
+        <label><input type="checkbox" data-r="signals" /> Adaptive signals</label>
+        <label><input type="checkbox" data-r="route" /> Coordinated rerouting</label>
+        <label><input type="checkbox" data-r="speed" /> Speed advisories</label>
+      </fieldset>
+    </div>
+    <svg class="curve-svg" viewBox="0 0 720 320" role="img" aria-labelledby="curve-cap" data-svg></svg>
+    <dl class="readouts" aria-live="polite">
+      <div><dt>Deepest drop</dt><dd data-o="depth">–</dd></div>
+      <div><dt>Time to recover</dt><dd data-o="rec">–</dd></div>
+      <div><dt>Loss vs no response</dt><dd data-o="loss">–</dd></div>
+    </dl>
+    <p class="demo-note" id="curve-cap">Conceptual sketch: the curves and response effects are made up to show the idea. Measuring them is the research.</p>
+  </div>
+</section>
+
+<script>
+  const HAZ: Record<string, { d: number; T: number; label: string }> = {
+    quake: { d: 0.62, T: 0.78, label: "weeks" },
+    flood: { d: 0.48, T: 0.62, label: "days" },
+    storm: { d: 0.38, T: 0.5, label: "hours" },
+    incident: { d: 0.3, T: 0.36, label: "hours" },
+  };
+  // Illustrative multipliers on [depth, recovery time].
+  const EFF: Record<string, [number, number]> = { plan: [0.72, 0.85], signals: [0.9, 0.8], route: [0.84, 0.74], speed: [0.94, 0.92] };
+
+  const root = document.getElementById("curve")!;
+  const svg = root.querySelector<SVGSVGElement>("[data-svg]")!;
+  const hz = root.querySelector<HTMLSelectElement>("[data-hazard]")!;
+  const boxes = [...root.querySelectorAll<HTMLInputElement>("[data-r]")];
+  const X0 = 60, X1 = 700, Y0 = 30, Y1 = 270, EV = 0.12; // plot box and event time (fraction)
+  const X = (f: number) => X0 + f * (X1 - X0), Y = (p: number) => Y1 - (p - 0.2) / 0.85 * (Y1 - Y0);
+  const smooth = (u: number) => (u <= 0 ? 0 : u >= 1 ? 1 : u * u * (3 - 2 * u));
+  const perf = (f: number, d: number, T: number) => (f < EV ? 1 : 1 - d * (1 - smooth((f - EV) / T)));
+  const area = (d: number, T: number) => { let a = 0; for (let i = 0; i <= 400; i++) a += 1 - perf(i / 400, d, T); return a / 400; };
+  const line = (d: number, T: number) => Array.from({ length: 161 }, (_, i) => `${i ? "L" : "M"}${X(i / 160).toFixed(1)} ${Y(perf(i / 160, d, T)).toFixed(1)}`).join("");
+
+  function render() {
+    const h = HAZ[hz.value];
+    let d = h.d, T = h.T;
+    boxes.filter((b) => b.checked).forEach((b) => { d *= EFF[b.dataset.r!][0]; T *= EFF[b.dataset.r!][1]; });
+    const any = boxes.some((b) => b.checked);
+    const base = line(h.d, h.T), resp = line(d, T);
+    const fill = `${resp} L${X(1)} ${Y(1)} L${X(EV)} ${Y(1)} Z`;
+    svg.innerHTML = `
+      <g font-family="Helvetica, Arial, sans-serif" font-size="13" fill="#8a8a8a">
+        <line x1="${X0}" y1="${Y1}" x2="${X1}" y2="${Y1}" stroke="#3a3a3a"/>
+        <line x1="${X0}" y1="${Y(1)}" x2="${X1}" y2="${Y(1)}" stroke="#3a3a3a" stroke-dasharray="3 5"/>
+        <text x="${X0 - 8}" y="${Y(1) + 4}" text-anchor="end">normal</text>
+        <text x="${X(EV)}" y="${Y1 + 22}" text-anchor="middle" fill="#ff6b6e">disruption</text>
+        <line x1="${X(EV)}" y1="${Y0}" x2="${X(EV)}" y2="${Y1}" stroke="#ff6b6e" stroke-dasharray="4 4"/>
+        <text x="${X1}" y="${Y1 + 22}" text-anchor="end">time after the event (${h.label}) →</text>
+      </g>
+      <text x="16" y="${(Y0 + Y1) / 2}" fill="#8a8a8a" font-family="Helvetica, Arial, sans-serif" font-size="13" transform="rotate(-90 16 ${(Y0 + Y1) / 2})" text-anchor="middle">network performance (safety and mobility)</text>
+      <path d="${fill}" fill="#ff6b6e" opacity="0.14"/>
+      <path d="${base}" fill="none" stroke="#9a9a9a" stroke-width="2" stroke-dasharray="6 6"/>
+      ${any ? `<path d="${resp}" fill="none" stroke="#6ea2ff" stroke-width="2.5"/>` : ""}
+      <g font-family="Helvetica, Arial, sans-serif" font-size="13">
+        <line x1="${X1 - 250}" y1="${Y0 + 4}" x2="${X1 - 222}" y2="${Y0 + 4}" stroke="#9a9a9a" stroke-width="2" stroke-dasharray="6 6"/>
+        <text x="${X1 - 214}" y="${Y0 + 8}" fill="#b3b3b3">no response</text>
+        ${any ? `<line x1="${X1 - 120}" y1="${Y0 + 4}" x2="${X1 - 92}" y2="${Y0 + 4}" stroke="#6ea2ff" stroke-width="2.5"/><text x="${X1 - 84}" y="${Y0 + 8}" fill="#b3b3b3">with responses</text>` : ""}
+      </g>`;
+    root.querySelector('[data-o="depth"]')!.textContent = `${Math.round(d * 100)}% below normal`;
+    root.querySelector('[data-o="rec"]')!.textContent = any ? `${Math.round((T / h.T) * 100)}% of no response` : "baseline";
+    root.querySelector('[data-o="loss"]')!.textContent = any ? `${Math.round((1 - area(d, T) / area(h.d, h.T)) * 100)}% less` : "–";
+  }
+
+  hz.addEventListener("change", render);
+  boxes.forEach((b) => b.addEventListener("change", render));
+  render();
+</script>

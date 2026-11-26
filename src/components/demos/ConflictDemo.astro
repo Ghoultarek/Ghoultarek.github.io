@@ -1,0 +1,193 @@
+<section class="demo" id="conflict" aria-labelledby="conflict-title">
+  <div class="demo-head">
+    <h2 id="conflict-title">Conflict playground</h2>
+    <p>
+      A car and a pedestrian head for the same crosswalk. Set their speeds and timing, press play, and hold
+      <strong>Brake</strong> to try to avoid the conflict. The readouts are the surrogate safety measures my
+      video pipeline computes from real trajectories: time-to-collision (TTC), post-encroachment time (PET),
+      and the deceleration rate to avoid a crash (DRAC).
+    </p>
+  </div>
+  <div class="demo-body">
+    <canvas class="demo-canvas" data-scene aria-label="Top-down view of a car approaching a crosswalk as a pedestrian crosses" role="img"></canvas>
+    <canvas class="demo-canvas demo-chart" data-chart aria-label="TTC over time" role="img"></canvas>
+    <div class="demo-controls">
+      <label>Car speed <output data-out="v1"></output><input type="range" data-in="v1" min="20" max="70" value="45" step="1" /></label>
+      <label>Pedestrian speed <output data-out="v2"></output><input type="range" data-in="v2" min="0.8" max="2.5" value="1.4" step="0.1" /></label>
+      <label>Car start distance <output data-out="d1"></output><input type="range" data-in="d1" min="20" max="72" value="64" step="1" /></label>
+      <div class="demo-buttons">
+        <button class="btn" type="button" data-play>Play</button>
+        <button class="chip" type="button" data-brake aria-pressed="false">Brake (hold)</button>
+        <button class="chip" type="button" data-reset>Reset</button>
+      </div>
+    </div>
+    <dl class="readouts" aria-live="polite">
+      <div><dt>TTC now</dt><dd data-r="ttc">–</dd></div>
+      <div><dt>Minimum TTC</dt><dd data-r="min">–</dd></div>
+      <div><dt>DRAC</dt><dd data-r="drac">–</dd></div>
+      <div><dt>PET</dt><dd data-r="pet">–</dd></div>
+      <div class="verdict"><dt>Severity</dt><dd data-r="sev">–</dd></div>
+    </dl>
+    <p class="demo-note">Illustrative kinematics with constant speeds, a 3 m conflict zone, conflicts flagged at TTC &lt; 3 s, and serious conflicts at TTC &lt; 1.5 s. Press play once to see the collision, then try braking. It is not calibrated to a site.</p>
+  </div>
+</section>
+
+<script>
+  import { crossing } from "../../lib/demo-math.js";
+
+  const root = document.getElementById("conflict")!;
+  const scene = root.querySelector<HTMLCanvasElement>("[data-scene]")!;
+  const chart = root.querySelector<HTMLCanvasElement>("[data-chart]")!;
+  const input = (k: string) => root.querySelector<HTMLInputElement>(`[data-in="${k}"]`)!;
+  const out = (k: string) => root.querySelector<HTMLOutputElement>(`[data-out="${k}"]`)!;
+  const read = (k: string) => root.querySelector<HTMLElement>(`[data-r="${k}"]`)!;
+  const playBtn = root.querySelector<HTMLButtonElement>("[data-play]")!;
+  const brakeBtn = root.querySelector<HTMLButtonElement>("[data-brake]")!;
+  const ZONE = 3, LEN1 = 4.5, LEN2 = 0.6, DECEL = 6, PED_START = 9;
+
+  type State = { t: number; d1: number; v1: number; d2: number; v2: number; braking: boolean; running: boolean;
+    hist: { t: number; ttc: number | null }[]; min: number | null; maxDrac: number | null;
+    times: { in1?: number; out1?: number; in2?: number; out2?: number } };
+  let s: State;
+
+  const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const fmt = (x: number | null, u: string, d = 2) => (x === null || !isFinite(x) ? "–" : `${x.toFixed(d)} ${u}`);
+
+  function reset() {
+    s = { t: 0, d1: +input("d1").value, v1: +input("v1").value / 3.6, d2: PED_START, v2: +input("v2").value,
+      braking: false, running: false, hist: [], min: null, maxDrac: null, times: {} };
+    playBtn.textContent = "Play";
+    out("v1").textContent = `${input("v1").value} km/h`;
+    out("v2").textContent = `${input("v2").value} m/s`;
+    out("d1").textContent = `${input("d1").value} m`;
+    measure();
+    draw();
+  }
+
+  function measure() {
+    const c = crossing({ d1: s.d1, v1: s.v1, len1: LEN1, d2: s.d2, v2: s.v2, len2: LEN2, zone: ZONE });
+    s.hist.push({ t: s.t, ttc: c.ttc });
+    if (c.ttc !== null) s.min = s.min === null ? c.ttc : Math.min(s.min, c.ttc);
+    // Ignore the last 2 m before the zone, where DRAC blows up and no braking could help anyway.
+    if (c.drac !== null && s.d1 - ZONE / 2 > 2) s.maxDrac = s.maxDrac === null ? c.drac : Math.max(s.maxDrac, c.drac);
+    // Record actual zone entry/exit times for PET.
+    const inZone = (d: number, len: number) => d <= ZONE / 2 && d + len >= -ZONE / 2;
+    const T = s.times;
+    if (inZone(s.d1, LEN1) && T.in1 === undefined) T.in1 = s.t;
+    if (T.in1 !== undefined && !inZone(s.d1, LEN1) && T.out1 === undefined && s.d1 < 0) T.out1 = s.t;
+    if (inZone(s.d2, LEN2) && T.in2 === undefined) T.in2 = s.t;
+    if (T.in2 !== undefined && !inZone(s.d2, LEN2) && T.out2 === undefined && s.d2 < 0) T.out2 = s.t;
+    let pet: number | null = null;
+    if (T.out1 !== undefined && T.in2 !== undefined && T.in2 >= T.out1) pet = T.in2 - T.out1;
+    else if (T.out2 !== undefined && T.in1 !== undefined && T.in1 >= T.out2) pet = T.in1 - T.out2;
+    const collided = T.in1 !== undefined && T.in2 !== undefined && T.out1 === undefined && T.out2 === undefined;
+
+    read("ttc").textContent = fmt(c.ttc, "s");
+    read("min").textContent = fmt(s.min, "s");
+    read("drac").textContent = fmt(s.maxDrac, "m/s²");
+    read("pet").textContent = fmt(pet, "s");
+    const m = s.min;
+    const sevEl = read("sev");
+    sevEl.textContent = collided ? "Collision" : m === null || m >= 3 ? "Safe interaction" : m < 1.5 ? "Serious conflict" : "Conflict";
+    sevEl.dataset.level = collided || (m !== null && m < 1.5) ? "high" : m === null || m >= 3 ? "none" : "low";
+    if (collided) stop();
+  }
+
+  function step(dt: number) {
+    if (s.braking) s.v1 = Math.max(0, s.v1 - DECEL * dt);
+    s.d1 -= s.v1 * dt;
+    s.d2 -= s.v2 * dt;
+    s.t += dt;
+    measure();
+    if ((s.d1 < -20 || s.v1 === 0) && s.d2 < -8) stop();
+  }
+
+  function fit(c: HTMLCanvasElement) {
+    const dpr = window.devicePixelRatio || 1;
+    const w = c.clientWidth, h = c.clientHeight;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
+    const ctx = c.getContext("2d")!;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w, h };
+  }
+
+  function draw() {
+    const { ctx, w, h } = fit(scene);
+    const ink = css("--ink"), muted = css("--muted"), line = css("--line"), card = css("--card"), risk = css("--risk"), accent = css("--accent");
+    const ppm = w / 95; // pixels per metre; the crosswalk sits 80% across
+    const ox = w * 0.8, oy = h * 0.45;
+    const X = (m: number) => ox + m * ppm, Y = (m: number) => oy + m * ppm;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = card;
+    ctx.fillRect(0, Y(-3.5), w, 7 * ppm);
+    ctx.setLineDash([10, 10]); ctx.strokeStyle = muted; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, oy); ctx.lineTo(w, oy); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = line;
+    for (let y = -3.5; y < 3.5; y += 1) ctx.fillRect(X(-1.5), Y(y), 3 * ppm, 0.5 * ppm);
+    const carY = -1.75;
+    ctx.strokeStyle = risk; ctx.lineWidth = 2;
+    ctx.strokeRect(X(-ZONE / 2), Y(carY - ZONE / 2), ZONE * ppm, ZONE * ppm);
+    // Car travels +x toward the zone in lane y = -1.75; its front is d1 from the zone centre.
+    ctx.fillStyle = ink;
+    ctx.fillRect(X(-s.d1 - LEN1), Y(carY - 0.9), LEN1 * ppm, 1.8 * ppm);
+    if (s.braking) { ctx.fillStyle = risk; ctx.fillRect(X(-s.d1 - LEN1) - 3, Y(carY - 0.9), 3, 1.8 * ppm); }
+    // Pedestrian walks up the crosswalk toward the car lane.
+    ctx.fillStyle = accent;
+    ctx.beginPath(); ctx.arc(X(0), Y(carY + s.d2), Math.max(4, 0.5 * ppm), 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = muted; ctx.font = "12px Helvetica, Arial, sans-serif";
+    ctx.fillText(`t = ${s.t.toFixed(1)} s`, 10, 18);
+    ctx.fillText(`car ${(s.v1 * 3.6).toFixed(0)} km/h`, 10, 34);
+    drawChart();
+  }
+
+  function drawChart() {
+    const { ctx, w, h } = fit(chart);
+    const muted = css("--muted"), line = css("--line"), risk = css("--risk"), ink = css("--ink");
+    const pad = 28, maxT = Math.max(6, s.t), maxY = 5;
+    const X = (t: number) => pad + (t / maxT) * (w - pad - 8);
+    const Y = (v: number) => h - 18 - (Math.min(v, maxY) / maxY) * (h - 28);
+    ctx.clearRect(0, 0, w, h);
+    ctx.strokeStyle = line; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad, Y(0)); ctx.lineTo(w - 8, Y(0)); ctx.moveTo(pad, Y(0)); ctx.lineTo(pad, Y(maxY)); ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = risk;
+    ctx.beginPath(); ctx.moveTo(pad, Y(1.5)); ctx.lineTo(w - 8, Y(1.5)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = muted; ctx.font = "11px Helvetica, Arial, sans-serif";
+    ctx.fillText("TTC (s)", 2, 12); ctx.fillText("1.5 s", w - 40, Y(1.5) - 4); ctx.fillText("5", 14, Y(5) + 4); ctx.fillText("0", 14, Y(0) + 4);
+    ctx.strokeStyle = ink; ctx.lineWidth = 2; ctx.beginPath();
+    let pen = false;
+    for (const p of s.hist) {
+      if (p.ttc === null) { pen = false; continue; }
+      if (pen) ctx.lineTo(X(p.t), Y(p.ttc)); else ctx.moveTo(X(p.t), Y(p.ttc));
+      pen = true;
+    }
+    ctx.stroke();
+  }
+
+  let last = 0;
+  function loop(now: number) {
+    if (!s.running) return;
+    const dt = Math.min(0.05, (now - last) / 1000 || 0);
+    last = now;
+    for (let i = 0; i < 5 && s.running; i++) step(dt / 5);
+    draw();
+    requestAnimationFrame(loop);
+  }
+  function stop() { s.running = false; playBtn.textContent = "Replay"; }
+
+  playBtn.addEventListener("click", () => {
+    if (s.running) { s.running = false; playBtn.textContent = "Play"; return; }
+    if (playBtn.textContent === "Replay") reset();
+    s.running = true; playBtn.textContent = "Pause"; last = performance.now();
+    requestAnimationFrame(loop);
+  });
+  const brake = (on: boolean) => { s.braking = on; brakeBtn.setAttribute("aria-pressed", String(on)); };
+  brakeBtn.addEventListener("pointerdown", () => brake(true));
+  ["pointerup", "pointerleave", "pointercancel"].forEach((e) => brakeBtn.addEventListener(e, () => brake(false)));
+  brakeBtn.addEventListener("keydown", (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); brake(true); } });
+  brakeBtn.addEventListener("keyup", () => brake(false));
+  root.querySelector("[data-reset]")!.addEventListener("click", reset);
+  ["v1", "v2", "d1"].forEach((k) => input(k).addEventListener("input", reset));
+  new ResizeObserver(() => draw()).observe(scene);
+  new MutationObserver(() => draw()).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  reset();
+</script>

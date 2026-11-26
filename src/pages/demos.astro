@@ -1,21 +1,26 @@
 ---
 import Base from "../layouts/Base.astro";
+import ConflictDemo from "../components/demos/ConflictDemo.astro";
+import EvtDemo from "../components/demos/EvtDemo.astro";
+import RouteDemo from "../components/demos/RouteDemo.astro";
+import SignalDemo from "../components/demos/SignalDemo.astro";
+import { demos } from "../data/profile";
 ---
-<Base title="Demos — Tarek Ghoul" description="Interactive demos from Tarek Ghoul's research.">
+<Base title="Demos — Tarek Ghoul" description="Interactive explainers for real-time crash risk, safest routes, and safety-aware signal control.">
   <main id="main" class="wrap">
     <header class="page-title">
       <h1>Demos</h1>
       <p class="lede">
-        Recordings from the thesis defence are on the research pages. A live tool will be linked here when one is public.
+        Four small simulations that run in your browser, each explaining one idea from my published work. They use
+        illustrative data and are labelled as such. The research pages have the real results.
       </p>
+      <nav class="actions" aria-label="Demos on this page">
+        {demos.map((d) => <a class="chip" href={d.href.replace("/demos", "")}>{d.title}</a>)}
+      </nav>
     </header>
-    <div class="actions">
-      <a class="chip" href="/research/crash-risk">Real-time Crash Risk Estimation</a>
-      <a class="chip" href="/research/routes">Routing & Navigation</a>
-      <a class="chip" href="/research/signals">Signal Optimization</a>
-    </div>
-    <div class="empty">
-      <p>No interactive link is up yet.</p>
-    </div>
+    <ConflictDemo />
+    <EvtDemo />
+    <RouteDemo />
+    <SignalDemo />
   </main>
 </Base>

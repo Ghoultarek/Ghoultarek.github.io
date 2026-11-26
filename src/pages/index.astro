@@ -1,6 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
-import { interests, news, profile } from "../data/profile";
+import { interests, directions, news, profile, reel, demos } from "../data/profile";
 ---
 <Base
   title="Tarek Ghoul"
@@ -37,11 +37,72 @@ import { interests, news, profile } from "../data/profile";
         {
           interests.map((item) => (
             <a class="card" href={item.href}>
-              <div class="card-media">
+              <div class:list={["card-media", { "frame-left": item.focus === "left" }]}>
                 {item.media.endsWith(".mp4") ? (
                   <video class="clip" src={item.media} poster={item.poster} data-still={item.poster} autoplay muted loop playsinline preload="metadata" width="1600" height="900"></video>
                 ) : (
                   <img class="clip" src={item.media} data-still={item.poster} alt="" width="640" height="360" />
+                )}
+              </div>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </a>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="watch">
+      <h2 id="watch">Watch the work</h2>
+      <div class="reel">
+        {
+          reel.map((item) => (
+            <figure class="reel-item">
+              <div class="stage-frame">
+                {item.sound ? (
+                  <video src={item.src} poster={item.poster} controls playsinline preload="none" width="1280" height="720"></video>
+                ) : (
+                  <video class="clip" src={item.src} poster={item.poster} data-still={item.poster} autoplay muted loop playsinline preload="metadata" width="1280" height="720"></video>
+                )}
+              </div>
+              <figcaption>
+                <a href={item.href}><strong>{item.title}</strong></a>
+                <span>{item.text}</span>
+              </figcaption>
+            </figure>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="try">
+      <h2 id="try">Try it yourself</h2>
+      <p class="hint">Illustrative examples to help explain the research. They run in your browser on simulated data, not real results.</p>
+      <div class="demo-links">
+        {
+          demos.map((d, i) => (
+            <a class="card demo-link" href={d.href}>
+              <span class="theme-num">0{i + 1}</span>
+              <h3>{d.title}</h3>
+              <p>{d.text}</p>
+            </a>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="block" aria-labelledby="directions">
+      <h2 id="directions">Research directions</h2>
+      <p class="hint">Where my work is heading</p>
+      <div class="cards two">
+        {
+          directions.map((item) => (
+            <a class="card" href={item.href}>
+              <div class="card-media">
+                {item.media.endsWith(".mp4") ? (
+                  <video class="clip" src={item.media} poster={item.poster} data-still={item.poster} autoplay muted loop playsinline preload="metadata" width="1280" height="720"></video>
+                ) : (
+                  <img src={item.media} alt="" width="900" height="900" loading="lazy" decoding="async" />
                 )}
               </div>
               <h3>{item.title}</h3>

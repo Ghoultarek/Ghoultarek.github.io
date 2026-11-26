@@ -118,9 +118,21 @@ export const areas: Area[] = [
           "This creates opportunities for combining fixed infrastructure data with observations from autonomous vehicles or connected fleets, although spatial coverage, observation bias, and uncertainty remain important considerations.",
         ],
         film: {
-          src: "/research/cyclist.gif",
+          src: "/research/cyclist.mp4",
           poster: "/research/cyclist.jpg",
-          caption: "Boston autonomous-vehicle probe. Surrounding cyclists and vehicles are observed as the vehicle travels through the network, allowing potentially hazardous interactions to be evaluated.",
+          caption: "Boston Seaport probe on route 1385. Tracked vehicles and cyclists, with modified time-to-collision and crash risk along the route.",
+        },
+      },
+      {
+        level: 3,
+        heading: "What the vehicle sees",
+        paras: [
+          "The playback shows what an autonomous vehicle's perception system records as it drives: every vehicle, pedestrian, and cyclist within range, in map coordinates and at each time step. These records are the raw material for the conflict measures and crash-risk estimates above.",
+        ],
+        film: {
+          src: "/research/av-probe.mp4",
+          poster: "/research/av-probe.jpg",
+          caption: "AV perception playback over Boston, showing detected vehicles, pedestrians, and cyclists within the detection range.",
         },
       },
       {
@@ -552,6 +564,18 @@ export const areas: Area[] = [
         title: "Proactive safety assessment",
         meta: "UBC Bureau of Intelligent Transportation Systems and Mobility.",
         text: "A pipeline pulls road-user trajectories out of video and scores near misses with PET, MTTC, TTC, and DRAC. Provincial agencies and the BC Centre for Disease Control have used the tools in safety audits.",
+      },
+      {
+        title: "3D digital twins for conflict analysis",
+        meta: "RoadAlly: a local platform for video-based conflict analysis.",
+        text: "This newer pipeline lifts a single camera view into a 3D scene. It detects road users as 3D cuboids, tracks them on an estimated ground plane in metres, and scores conflicts with 3D modified TTC and zone-based PET. Results go to a dashboard with heatmaps and exports. The video walks through it with sound.",
+        films: [
+          {
+            src: "/research/roadally.mp4",
+            poster: "/research/roadally.jpg",
+            caption: "From a traffic camera to a 3D digital twin, tracked trajectories, and scored near misses.",
+          },
+        ],
       },
     ],
   },

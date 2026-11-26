@@ -1,24 +1,45 @@
 ---
 import Base from "../layouts/Base.astro";
-import { projects } from "../data/profile";
+import { projectGroups } from "../data/profile";
 ---
-<Base title="Projects — Tarek Ghoul" description="Projects by Tarek Ghoul.">
+<Base title="Projects — Tarek Ghoul" description="Industry, government, and research projects by Tarek Ghoul.">
   <main id="main" class="wrap">
     <header class="page-title">
       <h1>Projects</h1>
       <p class="lede">
-        Industry and government work through the UBC Bureau of Intelligent Transportation Systems and Mobility,
-        plus the published routing application.
+        This page covers industry and government work, then published research.
       </p>
     </header>
     {
-      projects.map((project) => (
-        <article class="project" id={project.id}>
-          <h2>{project.title}</h2>
-          <p class="where">{project.where}</p>
-          {project.image && <img src={project.image} alt={project.imageAlt} width="1200" height="700" loading="lazy" decoding="async" />}
-          <p>{project.text}</p>
-        </article>
+      projectGroups.map((group) => (
+        <section class="group" id={group.id} aria-labelledby={`${group.id}-title`}>
+          <h2 id={`${group.id}-title`}>{group.title}</h2>
+          {group.projects.map((project) => (
+            <article class="project" id={project.id || undefined}>
+              <h3>
+                {project.href ? (
+                  <a href={project.href}>{project.title}</a>
+                ) : (
+                  project.title
+                )}
+              </h3>
+              <p class="where">{project.where}</p>
+              {project.image && (
+                <img
+                  class:list={{ clip: Boolean(project.poster) }}
+                  src={project.image}
+                  data-still={project.poster}
+                  alt={project.imageAlt}
+                  width="1100"
+                  height="473"
+                  loading="lazy"
+                  decoding="async"
+                />
+              )}
+              <p>{project.text}</p>
+            </article>
+          ))}
+        </section>
       ))
     }
   </main>

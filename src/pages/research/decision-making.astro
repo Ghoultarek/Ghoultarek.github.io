@@ -1,0 +1,83 @@
+---
+import Base from "../../layouts/Base.astro";
+import NetworkLevers from "../../components/research/NetworkLevers.astro";
+import InterventionDemo from "../../components/research/InterventionDemo.astro";
+
+const stack = [
+  { tag: "Building", title: "Vision-language models", text: "What each road user is doing, and why." },
+  { tag: "Future work", title: "Gaze and attention", text: "Where people look, as an early sign of whether they will yield." },
+  { tag: "Published · building", title: "Trajectory relationships", text: "Who is interacting with whom: yielding, following, near misses." },
+  { tag: "Working paper", title: "Multi-agent learned behaviour", text: "How many road users move together; already predicting each vehicle's next second in Athens." },
+  { tag: "Published · future work", title: "Markings and infrastructure", text: "How curbs, markings, and pavement change behaviour." },
+];
+
+const cites = [
+  { title: "Network-scale signal control with a learned speed advisory: the Athens pNEUMA network", meta: "Ghoul and Sayed.", note: "Working paper, in preparation; title provisional" },
+  { title: "Real-time safety optimization for signalized corridors using real-time crash risk and reinforcement learning", meta: "Ghoul and Sayed. CSCE Winnipeg 2025 proceedings, 2026." },
+  { title: "Real-time safest route identification: Examining the trade-off between safest and fastest routes", href: "https://doi.org/10.1016/j.amar.2023.100277", meta: "Ghoul, Sayed, and Fu. Analytic Methods in Accident Research, 2023." },
+  { title: "Real-time signal-vehicle coupled control: An application of connected vehicle data to improve intersection safety", href: "https://doi.org/10.1016/j.aap.2021.106389", meta: "Ghoul and Sayed. Accident Analysis and Prevention, 2021." },
+  { title: "Real-time safety optimization of connected vehicle trajectories using reinforcement learning", href: "https://doi.org/10.3390/s21113864", meta: "Ghoul and Sayed. Sensors, 2021." },
+];
+---
+<Base title="Decision-making for Infrastructure — Tarek Ghoul" description="Network-level decision making with signals, speed advisories, virtual infrastructure, and fleet routing, and world models that predict the effect of infrastructure before it is built.">
+  <main id="main" class="wrap dm">
+    <header class="page-title">
+      <p class="kicker">Research direction</p>
+      <h1>Decision-making for Infrastructure</h1>
+      <p class="lede">
+        How should a road network run, and what should we build? I answer both with simulation, reinforcement learning, and models
+        of how road users behave, with crash risk as an explicit objective.
+      </p>
+      <p class="illustrative-note">
+        <strong>Illustrative examples.</strong> They run on real Athens (pNEUMA) traffic with simplified stand-ins; they are not results from the working paper.
+      </p>
+    </header>
+
+    <NetworkLevers />
+    <InterventionDemo />
+
+    <section class="levers" aria-labelledby="stack-title">
+      <div class="levers-head">
+        <p class="kicker">The world model</p>
+        <h2 id="stack-title">Learning how people react to the street</h2>
+        <p>A design change only works through behaviour. These are the pieces of a model that predicts it.</p>
+      </div>
+      <div class="stack">
+        <figure class="stack-media">
+          <div class="stage-frame">
+            <video src="/research/roadally.mp4" poster="/research/roadally.jpg" controls playsinline preload="none" width="1280" height="720"></video>
+          </div>
+          <figcaption>RoadAlly: one traffic camera becomes a 3D digital twin with scored near misses.</figcaption>
+        </figure>
+        <ol class="stack-list">
+          {stack.map((s) => (
+            <li>
+              <span class="lever-tag">{s.tag}</span>
+              <h3>{s.title}</h3>
+              <p>{s.text}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+
+    <section class="story cites">
+      <h2>Publications and working papers</h2>
+      <ul>
+        {cites.map((c) => (
+          <li>
+            {c.href ? <a href={c.href}>{c.title}</a> : <span class="cite-title">{c.title}</span>}
+            <p class="meta">{c.meta}{c.note ? ` · ${c.note}` : ""}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <nav class="area-links" aria-label="Other research">
+      <a class="chip" href="/research/resilience">Resilience</a>
+      <a class="chip" href="/research/signals">Signal Optimization</a>
+      <a class="chip" href="/research/routes">Routing & Navigation</a>
+      <a class="chip" href="/research/crash-risk">Real-time Crash Risk Estimation</a>
+    </nav>
+  </main>
+</Base>

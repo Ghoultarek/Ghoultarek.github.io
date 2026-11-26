@@ -64,9 +64,7 @@ const current = (href: string) => path === href;
       <div class="foot-grid">
         <div>
           <p class="foot-label">Work</p>
-          <a href="/papers">Publications</a>
-          <a href="/projects">Projects</a>
-          <a href="/talks">Talks</a>
+          {nav.map((item) => <a href={item.href}>{item.label}</a>)}
           <a href="/demos">Demos</a>
         </div>
         <div>

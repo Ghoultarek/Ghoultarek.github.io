@@ -1,0 +1,561 @@
+<section class="levers" id="levers" aria-labelledby="levers-title">
+  <div class="levers-head">
+    <p class="kicker">Network-level decision making</p>
+    <h2 id="levers-title">Five levers on one network</h2>
+    <p>
+      A calibrated SUMO model of central Athens, built from pNEUMA drone data: 56 signals, real traffic.
+      Each lever asks one question: <em>what would happen if we did this?</em>
+    </p>
+  </div>
+  <div class="levers-tabs" role="tablist" aria-label="Levers">
+    <button role="tab" type="button" data-lever="signals" aria-selected="true"><b>1</b> Signal optimization</button>
+    <button role="tab" type="button" data-lever="advisory" aria-selected="false"><b>2</b> Speed advisories</button>
+    <button role="tab" type="button" data-lever="virtual" aria-selected="false"><b>3</b> Virtual infrastructure</button>
+    <button role="tab" type="button" data-lever="fleet" aria-selected="false"><b>4</b> Fleet routing</button>
+    <button role="tab" type="button" data-lever="joint" aria-selected="false"><b>5</b> Joint decisions</button>
+  </div>
+  <div class="levers-main">
+  <div class="levers-left">
+  <div class="levers-stage">
+    <canvas data-map role="img" aria-label="View for the selected lever"></canvas>
+    <div class="levers-hud">
+      <button class="hud-btn" type="button" data-play aria-label="Pause">Pause</button>
+      <span data-clock>08:35:00</span>
+      <label class="hud-speed">Speed
+        <select data-speed><option value="1">1×</option><option value="3" selected>3×</option><option value="8">8×</option></select>
+      </label>
+    </div>
+  </div>
+  <div class="lever-controls" data-controls></div>
+  </div>
+  <aside class="lever-row" aria-label="About this lever">
+    <div class="lever-text" aria-live="polite">
+      <span class="lever-tag" data-tag></span>
+      <h3 data-title></h3>
+      <p data-body></p>
+      <p class="lever-shown" data-shown></p>
+    </div>
+    <dl class="readouts lever-readouts" data-readouts aria-live="polite"></dl>
+  </aside>
+  </div>
+</section>
+
+<script>
+  type Edge = { f: number; t: number; len: number; v: number; s: number[]; h: number; q: number[] };
+  type Replay = { w: number; h: number; q: number; dur: number; bin: number; lanes: number[][];
+    heads: { tl: string; i: number; p: number[] }[]; tls: Record<string, string[]>; graph: Edge[];
+    adv: { len: number; head: number; green: number[] }; vehicles: [number, string, number[]][] };
+  type View = { step?: (dt: number) => void; draw: (ctx: CanvasRenderingContext2D) => void; aspect?: number };
+
+  const TEXT: Record<string, { tag: string; title: string; body: string; shown: string }> = {
+    signals: { tag: "Published · working paper", title: "Signal optimization",
+      body: "Reinforcement-learning agents at all 56 signals decide when each green ends, with crash risk in the objective.",
+      shown: "Today's fixed-time baseline on real traffic. Red vehicles are stopped." },
+    advisory: { tag: "Working paper", title: "Speed advisories",
+      body: "The signal’s timing is known, so each vehicle gets a speed that brings it to the stop line on green, spaced behind the vehicle ahead.",
+      shown: "One real Athens approach, run twice with the same arrivals." },
+    virtual: { tag: "Future work", title: "Virtual infrastructure",
+      body: "Rules that switch with conditions and are sent to vehicles and signs: counterflow lanes, no right on red, no left turns.",
+      shown: "Pick a rule and switch it on. Each scene simulates one hour." },
+    fleet: { tag: "Published · future work", title: "Network-scale fleet routing",
+      body: "Route a whole fleet together, instead of every vehicle taking its own fastest path.",
+      shown: "50 real trips on the Athens road graph. Fastest-overall saves the most time; balancing in safety improves both." },
+    joint: { tag: "Future work", title: "Joint decision making",
+      body: "Signal timing, speed advice, right-on-red rules, and routing, decided together for safety, mobility, and emissions.",
+      shown: "The same trip, today versus fully coordinated." },
+  };
+
+  const root = document.getElementById("levers")!;
+  const canvas = root.querySelector<HTMLCanvasElement>("[data-map]")!;
+  const playBtn = root.querySelector<HTMLButtonElement>("[data-play]")!;
+  const speedSel = root.querySelector<HTMLSelectElement>("[data-speed]")!;
+  const clock = root.querySelector<HTMLElement>("[data-clock]")!;
+  const controls = root.querySelector<HTMLElement>("[data-controls]")!;
+  const readouts = root.querySelector<HTMLElement>("[data-readouts]")!;
+  const tabs = [...root.querySelectorAll<HTMLButtonElement>("[data-lever]")];
+  const C = { bg: "#0b0b0b", road: "#3a3a3a", asph: "#1c1c1c", walk: "#3b3b3b", veh: "#e8e8e8", slow: "#ff6b6e", green: "#3ccf7a", yellow: "#ffc53d",
+    red: "#ff6b6e", blue: "#6ea2ff", teal: "#2ee6c8", dim: "rgba(232,232,232,0.25)", text: "#b3b3b3" };
+  let lever = "signals", data: Replay | null = null, t = 0, playing = true, last = 0, dpr = 1, W = 0, H = 0;
+  let base: HTMLCanvasElement | null = null, scale = 1;
+  let view: View = { draw: () => {} };
+
+  const font = (px: number, bold = false) => `${bold ? "bold " : ""}${px * dpr}px Helvetica, Arial, sans-serif`;
+  const setReadouts = (rows: [string, string][]) => (readouts.innerHTML = rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join(""));
+  function seg(name: string, opts: [string, string][], cur: string, on: (v: string) => void) {
+    const el = document.createElement("div");
+    el.className = "seg"; el.setAttribute("role", "radiogroup"); el.setAttribute("aria-label", name);
+    el.innerHTML = opts.map(([v, l]) => `<button type="button" role="radio" data-v="${v}" aria-checked="${v === cur}">${l}</button>`).join("");
+    el.querySelectorAll<HTMLButtonElement>("[data-v]").forEach((b) => b.addEventListener("click", () => {
+      el.querySelectorAll("[data-v]").forEach((x) => x.setAttribute("aria-checked", String(x === b))); on(b.dataset.v!);
+    }));
+    controls.appendChild(el);
+  }
+  const rng = (seed: number) => () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+
+  // ---------- shared map helpers ----------
+  const P = (x: number, y: number) => [x * scale, y * scale];
+  function polyline(ctx: CanvasRenderingContext2D, l: number[]) { ctx.beginPath(); for (let i = 0; i < l.length; i += 2) { const [x, y] = P(l[i], l[i + 1]); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } }
+  function buildBase() {
+    if (!data) return;
+    base = document.createElement("canvas"); base.width = canvas.width; base.height = canvas.height;
+    const b = base.getContext("2d")!;
+    b.fillStyle = C.bg; b.fillRect(0, 0, base.width, base.height);
+    b.strokeStyle = C.road; b.lineWidth = Math.max(1.5, 3.2 * data.q * scale); b.lineCap = "round"; b.lineJoin = "round";
+    for (const l of data.lanes) { polyline(b, l); b.stroke(); }
+  }
+  function vehPos(v: [number, string, number[]], tt: number) {
+    const k = Math.floor(tt - v[0]), xy = v[2];
+    if (k < 0 || k >= xy.length / 2 - 1) return null;
+    const f = tt - v[0] - k, i = k * 2;
+    return [xy[i] + (xy[i + 2] - xy[i]) * f, xy[i + 1] + (xy[i + 3] - xy[i + 1]) * f, Math.hypot(xy[i + 2] - xy[i], xy[i + 3] - xy[i + 1]) / data!.q];
+  }
+  function drawVehicles(ctx: CanvasRenderingContext2D, style: "speed" | "dim") {
+    const r = Math.max(1.3, 1.1 * scale * data!.q);
+    for (const v of data!.vehicles) {
+      const p = vehPos(v, t); if (!p) continue;
+      ctx.fillStyle = style === "dim" ? C.dim : p[2] < 0.5 ? C.slow : C.veh;
+      const [x, y] = P(p[0], p[1]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  const headState = (h: number, sec: number) => { const hd = data!.heads[h]; const s = data!.tls[hd.tl]?.[((Math.floor(sec) % data!.dur) + data!.dur) % data!.dur] || ""; return s[hd.i] || "r"; };
+  const stateColor = (s: string) => (s === "G" || s === "g" ? C.green : s === "y" || s === "Y" ? C.yellow : C.red);
+  function routeShape(ids: number[]) { const s: number[] = []; for (const id of ids) s.push(...data!.graph[id].s); return s; }
+  function along(s: number[], dist: number) {
+    let left = dist * data!.q;
+    for (let i = 0; i < s.length - 2; i += 2) {
+      const sg = Math.hypot(s[i + 2] - s[i], s[i + 3] - s[i + 1]);
+      if (left <= sg) { const f = sg ? left / sg : 0; return [s[i] + (s[i + 2] - s[i]) * f, s[i + 1] + (s[i + 3] - s[i + 1]) * f]; }
+      left -= sg;
+    }
+    return [s[s.length - 2], s[s.length - 1]];
+  }
+  function dijkstra(from: number, to: number, cost: (e: Edge, id: number) => number) {
+    const G = data!.graph, n = Math.max(...G.map((e) => Math.max(e.f, e.t))) + 1;
+    const dist = new Array(n).fill(Infinity), prev = new Array(n).fill(-1), done = new Array(n).fill(false);
+    dist[from] = 0;
+    for (;;) {
+      let u = -1; for (let i = 0; i < n; i++) if (!done[i] && dist[i] < Infinity && (u < 0 || dist[i] < dist[u])) u = i;
+      if (u < 0 || u === to) break; done[u] = true;
+      G.forEach((e, id) => { if (e.f === u) { const d = dist[u] + cost(e, id); if (d < dist[e.t]) { dist[e.t] = d; prev[e.t] = id; } } });
+    }
+    if (dist[to] === Infinity) return null;
+    const ids: number[] = []; for (let v = to; v !== from; v = G[prev[v]].f) ids.unshift(prev[v]);
+    return ids;
+  }
+  const nodeXY = (n: number) => { const e = data!.graph.find((g) => g.f === n); if (e) return [e.s[0], e.s[1]]; const g = data!.graph.find((x) => x.t === n)!; return [g.s[g.s.length - 2], g.s[g.s.length - 1]]; };
+
+  // ---------- 1. signals: the real replay ----------
+  function signalsView(): View {
+    setReadouts([["Signals", "56, today’s fixed plans"], ["Vehicles now", "–"], ["Stopped now", "–"]]);
+    return {
+      draw(ctx) {
+        ctx.drawImage(base!, 0, 0); drawVehicles(ctx, "speed");
+        const r = Math.max(2.2, 1.6 * scale * data!.q);
+        data!.heads.forEach((hd, h) => { ctx.fillStyle = stateColor(headState(h, t)); const [x, y] = P(hd.p[0], hd.p[1]); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); });
+        let n = 0, s = 0; for (const v of data!.vehicles) { const p = vehPos(v, t); if (p) { n++; if (p[2] < 0.5) s++; } }
+        const dd = readouts.querySelectorAll("dd"); dd[1].textContent = String(n); dd[2].textContent = `${s} (${Math.round((s / Math.max(1, n)) * 100)}%)`;
+      },
+    };
+  }
+
+  // ---------- 2. speed advisories: one real approach, run twice ----------
+  function advisoryView(): View {
+    const L = Math.min(150, data!.adv.len), green = data!.adv.green, A = 1.742, B = 2.1, V0 = 12.5, S0 = 2, TH = 1.0, LEN = 4.5;
+    const G = (sec: number) => green[((Math.floor(sec) % green.length) + green.length) % green.length] === 1;
+    const untilGreen = (sec: number) => { for (let k = 0; k < green.length; k++) if (G(sec + k)) return k - (sec % 1); return 99; };
+    const greenLeft = (sec: number) => { for (let k = 0; k < green.length; k++) if (!G(sec + k)) return k - (sec % 1); return 99; };
+    const nextGreenAfterRed = (sec: number) => { const r = greenLeft(sec); return r + untilGreen(sec + r + 0.001); };
+    const rnd = rng(7);
+    const arrivals: number[] = []; for (let a = 0; a < 600; a += 10 + rnd() * 5) arrivals.push(a); // below what this short green can serve
+    type V = { x: number; v: number; a: number; stopped: boolean; hard: boolean; ttc: boolean; capped: boolean; fresh: boolean };
+    const mk = (adv: boolean) => ({ adv, cars: [] as V[], next: 0, stops: 0, hard: 0, ttc: 0 });
+    const lanes = [mk(false), mk(true)];
+    let sim = 0;
+    function stepLane(ln: ReturnType<typeof mk>, dt: number) {
+      while (ln.next < arrivals.length && arrivals[ln.next] <= sim) { ln.cars.push({ x: L + 40, v: V0 * 0.95, a: 0, stopped: false, hard: false, ttc: false, capped: false, fresh: true }); ln.next++; }
+      const red = !G(sim);
+      // Green windows ahead, from the signal's known timeline: [start, end] in seconds from now.
+      const wins: [number, number][] = [];
+      if (ln.adv) {
+        let start = G(sim) ? 0 : -1;
+        for (let k = 1; k < 240 && wins.length < 5; k++) {
+          const g = G(sim + k);
+          if (g && start < 0) start = k - (sim % 1);
+          if (!g && start >= 0) { wins.push([start, k - (sim % 1)]); start = -1; }
+        }
+      }
+      let prevSlot = -Infinity; // the arrival slot given to the vehicle ahead
+      ln.cars.forEach((c, i) => {
+        let v0 = V0; c.capped = false;
+        if (ln.adv && c.x > 0) {
+          // Every approaching vehicle gets an arrival slot inside a green window, at least 2 s behind the vehicle ahead.
+          // Earliest arrival the vehicle can actually make from its current speed, accelerating at ~1.4 m/s^2 to the limit.
+          const acc = 1.4, ta = Math.max(0, (V0 - c.v) / acc), da = c.v * ta + 0.5 * acc * ta * ta;
+          const tReach = da >= c.x ? (-c.v + Math.sqrt(c.v * c.v + 2 * acc * c.x)) / acc : ta + (c.x - da) / V0;
+          const tFree = c.x / V0, earliest = Math.max(tReach, prevSlot + 2);
+          let slot = earliest;
+          for (const [a, b] of wins) { const t0 = Math.max(earliest, a + 2.5); if (t0 <= b - 1.5) { slot = t0; break; } }
+          prevSlot = slot;
+          if (slot > tReach + 0.5) { v0 = Math.max(1.5, c.x / slot); c.capped = true; } // only slow down when the slot is later than it can arrive anyway
+          // Keep the gap: an advised vehicle never runs faster than a nearby leader.
+          const ahead = i > 0 ? ln.cars[i - 1] : null;
+          if (ahead && c.v > ahead.v + 0.3 && c.x - ahead.x - LEN < 2 * c.v + 8) { v0 = Math.min(v0, Math.max(ahead.v + 0.5, 2)); c.capped = true; }
+          // The advice reaches vehicles upstream of this segment, so they enter already at their advised speed.
+          if (c.fresh) c.v = Math.min(c.v, v0);
+        }
+        c.fresh = false;
+        const lead = i > 0 ? ln.cars[i - 1] : null;
+        let gap = lead ? c.x - lead.x - LEN : Infinity, dv = lead ? c.v - lead.v : 0;
+        if (red && c.x > 0.5) { const g2 = c.x - 0.5; if (g2 < gap) { gap = g2; dv = c.v; } }
+        const sStar = S0 + c.v * TH + (c.v * dv) / (2 * Math.sqrt(A * B));
+        const free = Math.max(-1.5, A * (1 - Math.pow(c.v / v0, 4)));
+        const inter = gap < Infinity ? -A * Math.pow(Math.max(0, sStar) / Math.max(0.1, gap), 2) : 0;
+        c.a = Math.max(-7, free + inter);
+        // Rear-end TTC to the vehicle ahead.
+        if (lead && c.v > lead.v + 0.1) { const ttc = (c.x - lead.x - LEN) / (c.v - lead.v); if (ttc < 3 && !c.ttc) { c.ttc = true; ln.ttc++; } if (ttc > 5) c.ttc = false; }
+        else c.ttc = false;
+      });
+      for (const c of ln.cars) {
+        c.v = Math.max(0, c.v + c.a * dt); c.x = Math.max(red && c.x > 0 ? 0.3 : -999, c.x - c.v * dt);
+        if (c.a < -3 && !c.hard) { c.hard = true; ln.hard++; }
+        if (c.v < 0.5 && c.x > 0 && !c.stopped) { c.stopped = true; ln.stops++; }
+      }
+      while (ln.cars.length && ln.cars[0].x < -40) ln.cars.shift();
+    }
+    const reset = () => { sim = 0; lanes.forEach((ln) => Object.assign(ln, mk(ln.adv))); };
+    reset();
+    return {
+      aspect: 0.42,
+      step(dt) { const n = Math.ceil(dt / 0.05); for (let i = 0; i < n; i++) { sim += dt / n; lanes.forEach((ln) => stepLane(ln, dt / n)); } if (sim > 300) reset(); },
+      draw(ctx) {
+        ctx.fillStyle = C.bg; ctx.fillRect(0, 0, W, H);
+        const x0 = 30 * dpr, x1 = W - 160 * dpr, px = (x1 - x0) / (L + 40);
+        const rows = [H * 0.32, H * 0.72], lw = 26 * dpr, greenNow = G(sim);
+        lanes.forEach((ln, r) => {
+          const y = rows[r];
+          ctx.fillStyle = C.asph; ctx.fillRect(x0, y - lw / 2, W - x0 - 20 * dpr, lw);
+          if (ln.adv) { ctx.fillStyle = "rgba(110,162,255,0.14)"; ctx.fillRect(x0, y - lw / 2, x1 - x0, lw); }
+          ctx.fillStyle = "#e8e8e8"; ctx.fillRect(x1, y - lw / 2, 3 * dpr, lw); // stop line
+          ctx.fillStyle = greenNow ? C.green : C.red; ctx.beginPath(); ctx.arc(x1 + 14 * dpr, y - lw / 2 - 6 * dpr, 6 * dpr, 0, Math.PI * 2); ctx.fill();
+          ctx.font = font(13, true); ctx.fillStyle = C.text; ctx.fillText(ln.adv ? "With speed advisory" : "Today", x0, y - lw / 2 - 10 * dpr);
+          ctx.font = font(13); ctx.fillStyle = "#e8e8e8"; ctx.fillText(`${ln.stops} stops · ${ln.ttc} TTC < 3 s · ${ln.hard} hard brakes`, x0, y + lw / 2 + 20 * dpr);
+          for (const c of ln.cars) {
+            const front = x1 - c.x * px; // the front bumper; the body trails behind it
+            ctx.fillStyle = c.v < 0.5 ? C.slow : c.capped ? C.blue : C.veh;
+            ctx.fillRect(front - Math.max(6 * dpr, LEN * px), y - 6 * dpr, Math.max(6 * dpr, LEN * px), 12 * dpr);
+          }
+        });
+        ctx.font = font(12); ctx.fillStyle = C.text;
+        ctx.fillText("blue: advised to ease off · red: stopped", x0, H - 12 * dpr);
+        setReadouts([["Stops", `${lanes[0].stops} → ${lanes[1].stops}`], ["Near misses (TTC < 3 s)", `${lanes[0].ttc} → ${lanes[1].ttc}`], ["Hard braking", `${lanes[0].hard} → ${lanes[1].hard}`]]);
+      },
+    };
+  }
+
+  // ---------- 3. virtual infrastructure: dynamic rules ----------
+  function virtualView(): View {
+    let rule = "counterflow", on = false, scene = makeScene();
+    seg("Rule", [["counterflow", "Counterflow lane"], ["rtor", "No right on red"], ["noleft", "No left turn"]], rule, (v) => { rule = v; scene = makeScene(); });
+    seg("Rule state", [["off", "Off"], ["on", "On"]], "off", (v) => { on = v === "on"; scene = makeScene(); });
+    function makeScene() { return rule === "counterflow" ? counterflow(on) : rule === "rtor" ? rtor(on) : noLeft(on); }
+    return { aspect: 0.42, step: (dt) => scene.step(dt), draw: (ctx) => scene.draw(ctx) };
+  }
+
+  // World helpers for the rule scenes: a 100 m x 42 m frame.
+  const kx = () => W / 100;
+  const R = (ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x * kx(), y * kx(), w * kx(), h * kx()); };
+  const car = (ctx: CanvasRenderingContext2D, x: number, y: number, ang: number, c: string) => { ctx.save(); ctx.translate(x * kx(), y * kx()); ctx.rotate(ang); ctx.fillStyle = c; ctx.fillRect(-2.25 * kx(), -0.95 * kx(), 4.5 * kx(), 1.9 * kx()); ctx.restore(); };
+  const dot = (ctx: CanvasRenderingContext2D, x: number, y: number, c: string, r = 0.6) => { ctx.fillStyle = c; ctx.beginPath(); ctx.arc(x * kx(), y * kx(), r * kx(), 0, Math.PI * 2); ctx.fill(); };
+  function sign(ctx: CanvasRenderingContext2D, txt: string, x: number, y: number, lit: boolean) {
+    ctx.font = font(13, true); const w = ctx.measureText(txt).width + 18 * dpr;
+    ctx.fillStyle = lit ? "#2a0f10" : "#151515"; ctx.strokeStyle = lit ? C.red : "#3a3a3a"; ctx.lineWidth = 2 * dpr;
+    ctx.beginPath(); ctx.roundRect(x * kx(), y * kx(), w, 26 * dpr, 6 * dpr); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = lit ? C.red : "#777"; ctx.fillText(txt, x * kx() + 9 * dpr, y * kx() + 18 * dpr);
+  }
+  function intersection(ctx: CanvasRenderingContext2D) {
+    ctx.fillStyle = C.walk; ctx.fillRect(0, 0, W, H);
+    R(ctx, 0, 14, 100, 14, C.asph); R(ctx, 43, 0, 14, 42, C.asph);
+    ctx.strokeStyle = "#888"; ctx.lineWidth = 1.2 * dpr; ctx.setLineDash([2.5 * kx(), 2.5 * kx()]);
+    for (const y of [17.5, 24.5]) { ctx.beginPath(); ctx.moveTo(0, y * kx()); ctx.lineTo(39 * kx(), y * kx()); ctx.moveTo(61 * kx(), y * kx()); ctx.lineTo(W, y * kx()); ctx.stroke(); }
+    ctx.setLineDash([]); ctx.strokeStyle = "#d8b13a"; ctx.beginPath(); ctx.moveTo(0, 21 * kx()); ctx.lineTo(39 * kx(), 21 * kx()); ctx.moveTo(61 * kx(), 21 * kx()); ctx.lineTo(W, 21 * kx()); ctx.stroke();
+  }
+  function zebraV(ctx: CanvasRenderingContext2D, x: number, y0: number, y1: number) { ctx.fillStyle = "rgba(232,232,232,0.8)"; for (let y = y0 + 0.3; y < y1; y += 1.2) ctx.fillRect((x - 1.3) * kx(), y * kx(), 2.6 * kx(), 0.6 * kx()); }
+
+  // 3a. Counterflow: four-lane arterial, heavy eastbound peak. The middle westbound lane can be given to eastbound traffic.
+  function counterflow(on: boolean) {
+    const ebDem = 4500, wbDem = 900, laneCap = 1800, ebL = on ? 3 : 2, wbL = on ? 1 : 2;
+    const ebCap = ebL * laneCap, wbCap = wbL * laneCap, V = 13;
+    const lanesY = [12, 16, 20, 24], dirOf = (i: number) => (i < 2 ? (on && i === 1 ? "E" : "W") : "E");
+    let tt = 0;
+    setReadouts([["Peak direction: demand / capacity", `${ebDem} / ${ebCap} veh/h`], ["Other direction", `${wbDem} / ${wbCap} veh/h`], ["Queue", ebDem > ebCap ? `+${Math.round((ebDem - ebCap) / 60)} vehicles a minute` : "none"]]);
+    return {
+      step(dt: number) { tt += dt; },
+      draw(ctx: CanvasRenderingContext2D) {
+        ctx.fillStyle = C.walk; ctx.fillRect(0, 0, W, H);
+        R(ctx, 0, 10, 100, 16, C.asph);
+        const qn = ebDem > ebCap ? Math.min(6, 1 + Math.floor(tt / 2)) : 0, qEnd = 2 + qn * 5.5; // queued cars at the eastbound entry
+        lanesY.forEach((y, i) => {
+          const d = dirOf(i), served = d === "E" ? ebL : wbL, dem = d === "E" ? ebDem : wbDem, cap = d === "E" ? ebCap : wbCap;
+          const spacing = (V * 3600 * served) / Math.min(dem, cap);
+          for (let x = ((tt * V) % spacing) - spacing; x < 104; x += spacing) { if (d === "E" && i >= 2 && x < qEnd + 3) continue; car(ctx, d === "E" ? x : 100 - x, y, d === "E" ? 0 : Math.PI, d === "E" ? C.veh : "#8a8a8a"); }
+          ctx.font = font(16, true); ctx.fillStyle = i === 1 && on ? C.teal : "#9a9a9a";
+          ctx.fillText(d === "E" ? "→" : "←", 50 * kx(), (y + 0.6) * kx());
+        });
+        // Lane lines: the reversible lane is outlined in teal when it runs with the peak.
+        ctx.strokeStyle = on ? C.teal : "#d8b13a"; ctx.lineWidth = (on ? 3 : 1.5) * dpr;
+        if (on) ctx.setLineDash([3 * kx(), 2 * kx()]);
+        ctx.beginPath(); ctx.moveTo(0, (on ? 14 : 18) * kx()); ctx.lineTo(W, (on ? 14 : 18) * kx()); ctx.stroke(); ctx.setLineDash([]);
+        if (ebDem > ebCap) {
+          for (let k = 0; k < qn; k++) { car(ctx, qEnd - 2.5 - k * 5.5, 20, 0, C.red); car(ctx, qEnd - 2.5 - k * 5.5, 24, 0, C.red); }
+          ctx.font = font(13, true); ctx.fillStyle = C.red; ctx.fillText("Eastbound demand exceeds two lanes: queue growing", 2 * kx(), 32 * kx());
+        }
+        sign(ctx, on ? "MIDDLE LANE EASTBOUND · 7–9 AM" : "COUNTERFLOW OFF", 60, 30, on);
+        ctx.font = font(12); ctx.fillStyle = C.text; ctx.fillText("white: eastbound, the peak direction · grey: westbound", 2 * kx(), 39 * kx());
+      },
+    };
+  }
+
+  // 3b. No right turn on red at pedestrian peak. Eastbound right-turners wait at the west leg while pedestrians cross in front of them.
+  function rtor(on: boolean) {
+    const CYC = 60, RED = 30; // eastbound red for the first 30 s of each cycle; pedestrians cross the west leg then
+    const isRed = (s: number) => s % CYC < RED;
+    function makeSim() {
+      const r = rng(11), out = { conflicts: 0, waits: [] as number[] };
+      const peds: { y: number; dir: number }[] = [], queue: { arr: number }[] = [];
+      let turning: { s: number; conflict: boolean } | null = null, nextPed = 0, nextCar = 0, s = 0;
+      const stepOnce = (dt: number) => {
+        s += dt;
+        if (isRed(s) && s >= nextPed) { const dir = r() < 0.5 ? 1 : -1; peds.push({ y: dir > 0 ? 13.5 : 28.5, dir }); nextPed = s - Math.log(1 - r()) / 0.35; }
+        if (s >= nextCar) { queue.push({ arr: s }); nextCar = s - Math.log(1 - r()) / 0.05; }
+        for (const p of peds) p.y += p.dir * 1.3 * dt;
+        for (let i = peds.length - 1; i >= 0; i--) if (peds[i].y < 13 || peds[i].y > 29) peds.splice(i, 1);
+        if (!turning && queue.length) {
+          const waited = s - queue[0].arr;
+          // On red the driver stops, looks left for traffic for 2 s, then turns if the rule allows; on green they go.
+          if (!isRed(s) || (!on && waited > 2)) { turning = { s: 0, conflict: false }; out.waits.push(waited); queue.shift(); }
+        }
+        if (turning) {
+          turning.s += dt;
+          if (turning.s < 1.6 && isRed(s) && peds.some((p) => p.y > 23.5 && p.y < 28.5)) turning.conflict = true;
+          if (turning.s > 3) { if (turning.conflict) out.conflicts++; turning = null; }
+        }
+        return { peds, queue, turning, s };
+      };
+      return { stepOnce, out };
+    }
+    const hour = makeSim(); for (let k = 0; k < 36000; k++) hour.stepOnce(0.1);
+    const avgWait = hour.out.waits.reduce((a, b) => a + b, 0) / Math.max(1, hour.out.waits.length);
+    setReadouts([["Pedestrian conflicts / hour", String(hour.out.conflicts)], ["Right-turner wait", `${avgWait.toFixed(0)} s`], ["Rule", on ? "No turn on red, 3–6 PM" : "Turn on red allowed"]]);
+    const live = makeSim();
+    let st = live.stepOnce(0), flash = 0, lastConf = 0;
+    return {
+      step(dt: number) { const n = Math.ceil(dt / 0.05); for (let i = 0; i < n; i++) st = live.stepOnce(dt / n); if (live.out.conflicts > lastConf) { lastConf = live.out.conflicts; flash = 1.2; } flash = Math.max(0, flash - dt); },
+      draw(ctx: CanvasRenderingContext2D) {
+        intersection(ctx); zebraV(ctx, 40, 14, 28);
+        const red = isRed(st.s);
+        dot(ctx, 37, 30, red ? C.red : C.green, 0.9);
+        st.queue.slice(0, 6).forEach((_, k) => car(ctx, 35.5 - k * 6.5, 26.25, 0, C.veh));
+        if (st.turning) {
+          const u = Math.min(1, st.turning.s / 3), a = (u * Math.PI) / 2;
+          car(ctx, 38.5 + 6.25 * Math.sin(a), 26.25 + 6.25 * (1 - Math.cos(a)), a, st.turning.conflict ? C.red : C.veh);
+        }
+        for (const p of st.peds) dot(ctx, 40, p.y, C.blue);
+        if (flash > 0) { ctx.strokeStyle = C.red; ctx.lineWidth = 3 * dpr; ctx.beginPath(); ctx.arc(40.5 * kx(), 26.5 * kx(), 4 * kx(), 0, Math.PI * 2); ctx.stroke(); }
+        sign(ctx, on ? "NO TURN ON RED · 3–6 PM" : "TURN ON RED ALLOWED", 60, 31, on);
+        ctx.font = font(12); ctx.fillStyle = C.text; ctx.fillText(`blue: pedestrians crossing in front of the right-turners · ${live.out.conflicts} conflicts so far`, 2 * kx(), 40 * kx());
+      },
+    };
+  }
+
+  // 3c. No left turn at PM peak: eastbound left-turners must find gaps in heavy westbound traffic.
+  function noLeft(on: boolean) {
+    const VO = 12;
+    const r = rng(5); let nextOpp = 0, nextLeft = 0, conflicts = 0, turns = 0; const opp: number[] = [], lefts: number[] = [];
+    for (let s = 0; s < 3600; s += 0.1) {
+      if (s >= nextOpp) { opp.push(s); nextOpp = s + 1.2 - Math.log(1 - r()) / 0.6; }
+      if (s >= nextLeft) { lefts.push(r() * 3 + 2.5); nextLeft = s - Math.log(1 - r()) / 0.04; }
+      while (opp.length && opp[0] < s - 20) opp.shift();
+      if (lefts.length && !on) {
+        // Time until the next opposing vehicle reaches the conflict point; each driver accepts a gap of 2.5-5.5 s.
+        const nxt = opp.map((a) => a + 60 / VO - s).filter((g) => g > 0).sort((a, b) => a - b)[0] ?? 99;
+        if (nxt >= lefts[0]) { if (nxt < 4) conflicts++; turns++; lefts.shift(); }
+      } else if (on && lefts.length) { lefts.shift(); turns++; }
+    }
+    setReadouts([["Left-turn conflicts / hour", String(on ? 0 : conflicts)], [on ? "Rerouted / hour" : "Left turns / hour", String(turns)], ["Cost", on ? "~3 extra blocks per trip" : "every turn needs a gap"]]);
+    let tt = 0; const r2 = rng(9), oppLive: number[] = []; let nextLive = 0;
+    return {
+      step(dt: number) { tt += dt; if (tt >= nextLive) { oppLive.push(tt); nextLive = tt + 1.2 - Math.log(1 - r2()) / 0.6; } while (oppLive.length && oppLive[0] < tt - 12) oppLive.shift(); },
+      draw(ctx: CanvasRenderingContext2D) {
+        intersection(ctx);
+        for (const a of oppLive) car(ctx, 100 - (tt - a) * VO, 19.25, Math.PI, "#8a8a8a");
+        car(ctx, 44, 22.75, 0, on ? "#5a5a5a" : C.veh);
+        ctx.strokeStyle = on ? C.teal : C.yellow; ctx.lineWidth = 2 * dpr; ctx.setLineDash([1.2 * kx(), 1.2 * kx()]); ctx.beginPath();
+        if (on) {
+          ctx.moveTo(46 * kx(), 22.75 * kx()); ctx.lineTo(96 * kx(), 22.75 * kx()); ctx.stroke(); ctx.setLineDash([]);
+          ctx.font = font(13, true); ctx.fillStyle = C.teal; ctx.fillText("goes straight and reroutes around the block", 62 * kx(), 9 * kx());
+        } else {
+          ctx.moveTo(46 * kx(), 22.75 * kx()); ctx.quadraticCurveTo(52.5 * kx(), 22.75 * kx(), 52.5 * kx(), 2 * kx()); ctx.stroke(); ctx.setLineDash([]);
+          ctx.strokeStyle = "rgba(255,197,61,0.7)"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(51.5 * kx(), 19.25 * kx(), 2.2 * kx(), 0, Math.PI * 2); ctx.stroke();
+        }
+        sign(ctx, on ? "NO LEFT TURN · 4–6 PM" : "LEFT TURN ALLOWED", 60, 31, on);
+        ctx.font = font(12); ctx.fillStyle = C.text; ctx.fillText("grey: heavy westbound traffic · yellow ring: where left-turners must find a gap", 2 * kx(), 40 * kx());
+      },
+    };
+  }
+
+  // ---------- 4. network-scale fleet routing ----------
+  function fleetView(): View {
+    const G = data!.graph;
+    const nodes = [...new Set(G.flatMap((e) => [e.f, e.t]))], NXY = new Map(nodes.map((n) => [n, nodeXY(n)]));
+    const near = (x: number, y: number) => { let b = -1, bd = Infinity; for (const n of nodes) { const p = NXY.get(n)!; const d = Math.hypot(p[0] - x, p[1] - y); if (d < bd) { bd = d; b = n; } } return b; };
+    // Real trips: replay vehicles that crossed the network, snapped to their nearest start and end junctions.
+    const trips: [number, number][] = [], seen = new Set<string>();
+    for (const v of [...data!.vehicles].sort((a, b) => b[2].length - a[2].length)) {
+      const xy = v[2], o = near(xy[0], xy[1]), d = near(xy[xy.length - 2], xy[xy.length - 1]), key = `${o}-${d}`;
+      if (o === d || seen.has(key) || !dijkstra(o, d, (e) => e.len)) continue;
+      seen.add(key); trips.push([o, d]); if (trips.length === 50) break;
+    }
+    const PER = 10, CAP = 70, qAvg = G.map((e) => e.q.reduce((a, b) => a + b, 0) / e.q.length);
+    const t0 = G.map((e, i) => e.len / e.v + qAvg[i] * 2);
+    const tLoad = (i: number, load: number) => t0[i] * (1 + 0.15 * Math.pow(load / CAP, 4)); // volume-delay function
+    function assign(coordinated: boolean, wRisk = 0) {
+      const load = new Array(G.length).fill(0), routes: number[][] = [];
+      for (const [o, d] of trips) {
+        // Coordinated: route on marginal (system) cost plus a risk penalty; selfish: each trip's own free travel time.
+        const r = coordinated
+          ? dijkstra(o, d, (_e, i) => (tLoad(i, load[i] + PER) * (load[i] + PER) - tLoad(i, load[i]) * load[i]) / PER + qAvg[i] * wRisk)!
+          : dijkstra(o, d, (_e, i) => t0[i])!;
+        r.forEach((i) => (load[i] += PER)); routes.push(r);
+      }
+      const time = load.reduce((a, l, i) => a + l * tLoad(i, l), 0) / 3600, expo = load.reduce((a, l, i) => a + l * qAvg[i], 0);
+      return { load, routes, time, expo, max: Math.max(...load) };
+    }
+    const runs: Record<string, ReturnType<typeof assign>> = { selfish: assign(false), coord: assign(true, 0), safe: assign(true, 15) }; // weight 15: the balance where both travel time and risky-link exposure beat every-vehicle-for-itself
+    let mode = "selfish", cur = runs.selfish;
+    const pct = (a: number, b: number) => { const d = Math.round((1 - a / b) * 1000) / 10; return d === 0 ? "no change" : d > 0 ? `${d}% lower` : `${-d}% higher`; };
+    const rd = () => setReadouts([["Fleet", `${trips.length} real trips × ${PER} vehicles`],
+      ["Fleet travel time", `${runs.selfish.time.toFixed(1)} h → ${cur.time.toFixed(1)} h (${pct(cur.time, runs.selfish.time)})`],
+      ["Exposure to risky links", pct(cur.expo, runs.selfish.expo)]]);
+    seg("Routing", [["selfish", "Every vehicle for itself"], ["coord", "Fleet: fastest overall"], ["safe", "Fleet: fast + safe"]], mode, (v) => { mode = v; cur = runs[v]; rd(); });
+    rd();
+    return {
+      draw(ctx) {
+        ctx.drawImage(base!, 0, 0); drawVehicles(ctx, "dim");
+        const col = mode === "selfish" ? C.yellow : mode === "coord" ? C.blue : C.teal;
+        G.forEach((e, i) => { const l = cur.load[i]; if (!l) return; ctx.strokeStyle = col; ctx.globalAlpha = 0.85; ctx.lineWidth = Math.max(1.5 * dpr, (l / 40) * dpr * 2.2); polyline(ctx, e.s); ctx.stroke(); });
+        ctx.globalAlpha = 1;
+        cur.routes.forEach((r, k) => {
+          const s = routeShape(r), total = r.reduce((a, i) => a + G[i].len, 0);
+          const d = (t * 9 + k * 37) % (total + 80); if (d > total) return;
+          const [x, y] = along(s, d); const [X, Y] = P(x, y);
+          ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(X, Y, 3.2 * dpr, 0, Math.PI * 2); ctx.fill();
+        });
+        ctx.font = font(13); ctx.fillStyle = C.text;
+        ctx.fillText(`line width: fleet vehicles per link · busiest link carries ${cur.max} fleet vehicles`, 12 * dpr, H - 12 * dpr);
+      },
+    };
+  }
+
+  // ---------- 5. joint: every signal turns green on arrival ----------
+  function jointView(): View {
+    const G = data!.graph, nodes = [...new Set(G.flatMap((e) => [e.f, e.t]))];
+    let route: number[] = [], bestScore = -1;
+    for (let i = 0; i < nodes.length; i += 6) for (let j = 3; j < nodes.length; j += 6) {
+      const r = dijkstra(nodes[i], nodes[j], (e) => e.len / e.v); if (!r) continue;
+      const sig = r.filter((id) => G[id].h >= 0).length, score = sig * 1000 + r.length;
+      if (sig >= 4 && score > bestScore) { bestScore = score; route = r; }
+    }
+    const shape = routeShape(route), total = route.reduce((a, id) => a + G[id].len, 0);
+    function simulate(depart: number, joint: boolean) {
+      const tl: [number, number][] = [[depart, 0]], arrive: [number, number][] = []; let tt = depart, d = 0, stops = 0;
+      for (const id of route) {
+        const e = G[id]; tt += e.len / e.v; d += e.len; tl.push([tt, d]);
+        if (e.h >= 0) {
+          arrive.push([e.h, tt]);
+          if (!joint) { let w = 0; while (!"Gg".includes(headState(e.h, tt + w)) && w < 120) w++; if (w > 0) { stops++; tt += w; tl.push([tt, d]); } }
+        }
+      }
+      return { tl, stops, time: tt - depart, arrive };
+    }
+    // Smallest shift of a signal's real cycle that makes it green from 3 s before to 1 s after the vehicle arrives.
+    const offsets = new Map<string, number>();
+    const offsetFor = (h: number, ta: number) => {
+      const key = `${h}@${Math.round(ta)}`;
+      if (!offsets.has(key)) {
+        let best = 0;
+        for (let d = 0; d < data!.dur; d++) if ([-3, -2, -1, 0, 1].every((k) => "Gg".includes(headState(h, ta + k + d)))) { best = d; break; }
+        offsets.set(key, best);
+      }
+      return offsets.get(key)!;
+    };
+    let depart = t, today = simulate(depart, false), joint = simulate(depart, true), mode = "today";
+    seg("Decision", [["today", "Today"], ["joint", "Coordinated"]], mode, (v) => { mode = v; depart = t; today = simulate(depart, false); joint = simulate(depart, true); rd(); });
+    const nSig = route.filter((id) => G[id].h >= 0).length;
+    const rd = () => setReadouts([["Decided together", "Signals · speed advice · right on red · routing"],
+      ["Signals on the trip", String(nSig)], ["Stops", `${today.stops} → ${joint.stops}`], ["Trip time", `${Math.round(today.time)} s → ${Math.round(joint.time)} s`]]);
+    rd();
+    const at = (tl: [number, number][], tt: number) => { for (let i = 1; i < tl.length; i++) if (tt <= tl[i][0]) { const [a, d0] = tl[i - 1], [b, d1] = tl[i]; return d0 + (d1 - d0) * ((tt - a) / Math.max(1e-6, b - a)); } return tl[tl.length - 1][1]; };
+    return {
+      step() { const cur = mode === "joint" ? joint : today; if (t - depart > cur.time + 4 || t < depart) { depart = t; today = simulate(depart, false); joint = simulate(depart, true); rd(); } },
+      draw(ctx) {
+        ctx.drawImage(base!, 0, 0); drawVehicles(ctx, "dim");
+        ctx.strokeStyle = C.blue; ctx.globalAlpha = 0.5; ctx.lineWidth = 4 * dpr; polyline(ctx, shape); ctx.stroke(); ctx.globalAlpha = 1;
+        const run = mode === "joint" ? joint : today, r = Math.max(3, 2.2 * scale * data!.q);
+        // The rest of the network keeps running its real plans.
+        const onRoute = new Set(run.arrive.map(([h]) => h));
+        data!.heads.forEach((hd, h) => { if (onRoute.has(h)) return; ctx.fillStyle = stateColor(headState(h, t)); ctx.globalAlpha = 0.7; const [x, y] = P(hd.p[0], hd.p[1]); ctx.beginPath(); ctx.arc(x, y, r * 0.8, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1; });
+        for (const [h, ta] of run.arrive) {
+          // Joint: each signal keeps its real cycle, shifted by a coordinated offset so its green covers this vehicle's arrival.
+          const st = mode === "joint" ? headState(h, t + offsetFor(h, ta)) : headState(h, t);
+          const hd = data!.heads[h]; const [x, y] = P(hd.p[0], hd.p[1]);
+          ctx.fillStyle = stateColor(st); ctx.beginPath(); ctx.arc(x, y, r * 1.7, 0, Math.PI * 2); ctx.fill();
+        }
+        const d = Math.min(total, at(run.tl, t)); const [x, y] = along(shape, d); const [X, Y] = P(x, y);
+        ctx.fillStyle = mode === "joint" ? C.blue : "#e8e8e8"; ctx.strokeStyle = C.bg; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.arc(X, Y, 8 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.font = font(13); ctx.fillStyle = C.text;
+        ctx.fillText(mode === "joint" ? "Coordinated: every signal still cycles, timed so this trip meets green" : "Today: real timings, the trip stops at each red", 12 * dpr, H - 12 * dpr);
+      },
+    };
+  }
+
+  const VIEWS: Record<string, () => View> = { signals: signalsView, advisory: advisoryView, virtual: virtualView, fleet: fleetView, joint: jointView };
+
+  function size() {
+    if (!data) return;
+    dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth, aspect = view.aspect ?? data.h / data.w, h = Math.round(w * aspect);
+    canvas.style.height = `${h}px`; canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    W = canvas.width; H = canvas.height; scale = W / data.w;
+    buildBase(); draw();
+  }
+  function draw() { if (data && base) view.draw(canvas.getContext("2d")!); const s = 35 * 60 + Math.floor(t); clock.textContent = `08:${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`; }
+  function setLever(k: string) {
+    lever = k; controls.innerHTML = "";
+    tabs.forEach((b) => b.setAttribute("aria-selected", String(b.dataset.lever === k)));
+    const T = TEXT[k];
+    root.querySelector("[data-tag]")!.textContent = T.tag; root.querySelector("[data-title]")!.textContent = T.title;
+    root.querySelector("[data-body]")!.textContent = T.body; root.querySelector("[data-shown]")!.textContent = T.shown;
+    if (data) { view = VIEWS[k](); size(); }
+  }
+  function loop(now: number) {
+    const dt = Math.min(0.1, (now - last) / 1000) * +speedSel.value; last = now;
+    if (playing && data) { t += dt; if (t >= data.dur - 1) t = 0; view.step?.(dt); draw(); }
+    requestAnimationFrame(loop);
+  }
+
+  tabs.forEach((b) => b.addEventListener("click", () => setLever(b.dataset.lever!)));
+  root.querySelector<HTMLElement>("[role=tablist]")!.addEventListener("keydown", (e) => {
+    const i = tabs.findIndex((b) => b.dataset.lever === lever);
+    const j = e.key === "ArrowRight" ? (i + 1) % tabs.length : e.key === "ArrowLeft" ? (i + tabs.length - 1) % tabs.length : -1;
+    if (j >= 0) { e.preventDefault(); tabs[j].focus(); setLever(tabs[j].dataset.lever!); }
+  });
+  playBtn.addEventListener("click", () => { playing = !playing; playBtn.textContent = playing ? "Pause" : "Play"; playBtn.setAttribute("aria-label", playing ? "Pause" : "Play"); });
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { playing = false; playBtn.textContent = "Play"; t = 60; }
+  setLever("signals");
+  fetch("/research/athens-replay.json").then((r) => r.json()).then((d: Replay) => {
+    data = d; view = VIEWS[lever](); size();
+    let lastW = canvas.clientWidth;
+    new ResizeObserver(() => { if (canvas.clientWidth !== lastW) { lastW = canvas.clientWidth; size(); } }).observe(canvas);
+    requestAnimationFrame((n) => { last = n; loop(n); });
+  });
+</script>

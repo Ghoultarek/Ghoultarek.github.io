@@ -10,8 +10,90 @@ export const profile = {
 export const nav = [
   { href: "/papers", label: "Publications" },
   { href: "/projects", label: "Projects" },
+  { href: "/teaching", label: "Teaching" },
   { href: "/talks", label: "Talks" },
-  { href: "/demos", label: "Demos" },
+  { href: "/awards", label: "Awards" },
+];
+
+// Home-page video reel. Add a 3MT entry here once a public recording URL exists.
+export const reel = [
+  {
+    title: "From video to near misses",
+    text: "A 3D digital twin of an intersection. Every road user is tracked in metres and conflicts are scored by PET and TTC.",
+    src: "/research/roadally.mp4",
+    poster: "/research/roadally.jpg",
+    sound: true,
+    href: "/research/perception",
+  },
+  {
+    title: "An autonomous vehicle as a safety sensor",
+    text: "Playback of the Boston AV perception data used to estimate cyclist crash risk.",
+    src: "/research/av-probe.mp4",
+    poster: "/research/av-probe.jpg",
+    href: "/research/crash-risk",
+  },
+  {
+    title: "Multi-agent signal control",
+    text: "Reinforcement-learning agents set signal timing across a corridor using safety and mobility.",
+    src: "/research/signal-multi.mp4",
+    poster: "/research/signal-multi.jpg",
+    href: "/research/signals",
+  },
+];
+
+export const demos = [
+  { href: "/demos#conflict", title: "Conflict playground", text: "Brake a car before a crosswalk and watch TTC, PET, and DRAC respond." },
+  { href: "/demos#evt", title: "Average risk hides the peaks", text: "Extreme-value crash risk across twelve sites and a full day." },
+  { href: "/demos#routes", title: "Safest or fastest route?", text: "Trade travel time against crash-risk exposure on a live network." },
+  { href: "/demos#signal", title: "Run the intersection", text: "Play the traffic lights yourself against a safety-aware controller." },
+];
+
+export const teaching = [
+  { code: "CIVL 582", title: "Transportation Engineering Impacts and Empirical Bayes", level: "Graduate, 4–12 students", years: "2021–present", role: "Senior teaching assistant. Delivered lectures on Bayesian statistics and traffic safety; grading and office hours." },
+  { code: "CIVL 340", title: "Transportation Engineering I", level: "Undergraduate, 145–160 students", years: "2021–22, 2023–24", role: "Guest lectures, grading, and office hours." },
+  { code: "CIVL 445 / 446", title: "Engineering Capstone Project", level: "Undergraduate, 112–160 students", years: "2020–2026", role: "Assessment of presentations and deliverables; transportation design advising, including independent advising during a faculty sabbatical." },
+  { code: "URSY 540", title: "Urban Systems Project Delivery and Economics", level: "Master of Engineering Leadership, 9 students", years: "2021–2022", role: "Course support, project grading, and feedback." },
+];
+
+export const teachingTopics = ["Bayesian statistics", "Empirical Bayes methods", "Traffic safety", "Road design", "Risk management"];
+
+export const funding = [
+  { year: "2024–2025", title: "Mitacs Accelerate, CAD $60,000", text: "Rogers Communications partnership. Primary contributor to the proposal for a computer vision and reinforcement learning pipeline for corridor-level signal optimization." },
+];
+
+export const awards = [
+  { year: "2026", title: "ITE Canada Doctoral Transportation Scholarship" },
+  { year: "2025, 2026", title: "Three Minute Thesis: Civil Engineering winner; university top-five finalist" },
+  { year: "2025", title: "BPOC Graduate Excellence Award" },
+  { year: "2021–2025", title: "President’s Academic Excellence Initiative PhD Award" },
+  { year: "2022", title: "British Columbia Graduate Scholarship" },
+  { year: "2022", title: "TAC Foundation IBI Group Scholarship" },
+  { year: "2021", title: "Civil Engineering Excellence Scholarship (CIV EX)" },
+  { year: "2026", title: "IMC Prosperity Quantitative Finance Challenge, 267th of about 13,000 (top 2%)" },
+];
+
+export const service = [
+  { year: "2024–2026", title: "UBC Civil Engineering Equity, Diversity and Inclusion Committee" },
+  { year: "2025", title: "UBC Civil Engineering Department Head Reappointment Committee" },
+  { year: "2024–2026", title: "CEGSS Equity, Diversity and Inclusion Student Representative" },
+  { year: "2023–present", title: "Guest speaker, graduate student orientation" },
+  { year: "2018–2026", title: "UBC ITE Student Chapter: President (2020), Treasurer (2019), VP Continuity (2021–2026). Secured over CAD $50,000 in sponsorship; coached Traffic Bowl teams to chapter wins in 2021, 2023, 2024, 2025, and 2026; 2021 Student Chapter of the Year; STEM outreach in high schools." },
+  { year: "Reviewer", title: "Accident Analysis and Prevention; IEEE Transactions on Intelligent Transportation Systems; Scientific Reports; IEEE ITSC; TRB Annual Meeting; CSCE Annual Conference" },
+];
+
+export const directions = [
+  {
+    title: "Decision-making for Infrastructure",
+    text: "Five network-level levers, from signals and speed advisories to fleet routing and virtual infrastructure for AVs, and world models that predict what new infrastructure will do before it is built.",
+    href: "/research/decision-making",
+    media: "/research/levers.jpg",
+  },
+  {
+    title: "Resilience",
+    text: "Future work: keeping people safe and moving through earthquakes, floods, storms, and incidents, and measuring how fast safety and mobility recover.",
+    href: "/research/resilience",
+    media: "/research/risk-map.gif",
+  },
 ];
 
 export const interests = [
@@ -19,8 +101,9 @@ export const interests = [
     title: "Real-time Crash Risk Estimation",
     text: "Predicting crashes over short time intervals using road-user trajectories obtained from autonomous vehicles, drones, and traffic cameras.",
     href: "/research/crash-risk",
-    media: "/research/probes-card.mp4",
-    poster: "/research/probes-card.jpg",
+    media: "/research/cyclist.mp4",
+    poster: "/research/cyclist.jpg",
+    focus: "left",
   },
   {
     title: "Routing & Navigation",
@@ -196,52 +279,130 @@ export const papers: { id?: string; heading: string; items: Paper[] }[] = [
   },
 ];
 
-export const projects = [
+export const projectGroups = [
   {
-    id: "rag",
-    title: "Traffic Bowl retrieval",
-    where: "AutomateITE",
-    text: "A retrieval pipeline over traffic-engineering questions, scored against the same models answering with no retrieval.",
-    image: "/research/rag.png",
-    imageAlt: "Bar chart comparing hybrid retrieval and no retrieval across language models on Traffic Bowl questions",
+    id: "industry",
+    title: "Industry and government",
+    projects: [
+      {
+        title: "BC passing-distance law",
+        where: "Province of British Columbia, 2024",
+        text: "This project used survival analysis of vehicle–cyclist interactions to produce a technical report on factors that affect safety during a lateral pass. The Province used the report as advice on a minimum passing distance, and the 1.5 m and 1 m recommendations were adopted in the 2024 Motor Vehicle Act amendments.",
+      },
+      {
+        id: "perception",
+        title: "Near-miss detection",
+        where: "UBC Bureau of Intelligent Transportation Systems and Mobility",
+        text: "This computer-vision pipeline extracts road-user trajectories from video and scores near misses using PET, MTTC, TTC, and DRAC. Provincial transportation authorities and the BC Centre for Disease Control used the tools in safety audits.",
+      },
+      {
+        id: "signals",
+        title: "Camera-based corridor-level signal optimization",
+        where: "Rogers Communications and the BC Ministry of Transportation, 2024–2025",
+        text: "This was a proof of concept for multi-agent reinforcement learning on a corridor, covering vehicles and pedestrians. The work was supported by a Mitacs Accelerate award of CAD $60,000, and I was the primary contributor to the proposal.",
+      },
+      {
+        title: "Applications of Emerging Data",
+        where: "Transport Canada",
+        text: "This Applications of Emerging Data report for Transport Canada reviewed traditional and emerging sensing technologies, their safety applications, and practice in other jurisdictions. It also addresses the role of strategy and AI in how that data is collected and used.",
+      },
+      {
+        title: "Rural road safety audit",
+        where: "An Indigenous community in British Columbia",
+        text: "This audit used conflict analysis on a remote road, then implemented countermeasures and evaluated them in a before-and-after study of safety and speeding.",
+      },
+      {
+        title: "Pavement marking evaluation",
+        where: "Provincial report, British Columbia",
+        text: "Computer vision was used to measure how certain pavement markings affect safety, to help guide provincial investments.",
+      },
+    ],
   },
   {
-    id: "perception",
-    title: "Proactive safety assessment tool",
-    where: "UBC Bureau of Intelligent Transportation Systems and Mobility",
-    text: "A computer-vision pipeline that pulls road-user trajectories out of video and scores near misses with PET, MTTC, TTC, and DRAC. Provincial agencies and the BC Centre for Disease Control used the tools in safety audits.",
+    id: "research",
+    title: "Research",
+    projects: [
+      {
+        title: "Network crash-risk forecasting",
+        where: "Analytic Methods in Accident Research, 2026",
+        href: "https://doi.org/10.1016/j.amar.2026.100441",
+        text: "This paper develops a Bayesian hierarchical marked point process with spatial dependence to forecast crash risk across a network and across future time horizons. It estimates where risk is high now, where it may rise, and how uncertain that forecast is.",
+      },
+      {
+        title: "Spatial crash-risk models",
+        where: "Transportmetrica A: Transport Science, 2026",
+        href: "https://doi.org/10.1080/23249935.2026.2669212",
+        text: "This paper does not treat neighboring sites as independent. The hierarchical extreme-value model shares information across the network, which matters when local observations are sparse. In the studied network, about three-quarters of site-level variation was associated with spatial effects.",
+      },
+      {
+        title: "Corridor signal optimization",
+        where: "CSCE Winnipeg 2025 proceedings, 2026",
+        text: "This paper uses camera trajectories, extreme-value crash risk, and reinforcement learning to set signal timing along a corridor rather than at one intersection. On Wesbrook Mall, a soft actor-critic controller extends green time using both mobility and safety.",
+      },
+      {
+        title: "Real-time crash risk",
+        where: "PhD thesis, University of British Columbia, 2026",
+        href: "https://doi.org/10.14288/1.0456953",
+        text: "The dissertation develops real-time crash-risk models from traffic conflicts and applies those models to routing and signal control.",
+      },
+      {
+        title: "Cyclist safety from AVs",
+        where: "Accident Analysis and Prevention, 2025",
+        href: "https://doi.org/10.1016/j.aap.2025.107923",
+        text: "This paper uses an autonomous vehicle in Boston as a moving sensor. Observations of nearby road users are turned into cyclist crash-risk estimates, and about 84% of that estimated risk was associated with intersections.",
+      },
+      {
+        title: "Helmet-violation detection",
+        where: "Algorithms, 2024",
+        href: "https://doi.org/10.3390/a17050202",
+        text: "This paper trains a YOLOv8 detector for riders without helmets. Generated images fill in the cases where real examples of the violation were scarce.",
+      },
+      {
+        title: "Crash risk for urban ITS",
+        where: "CSCE Annual Conference proceedings, 2024",
+        text: "This paper treats short-term crash risk as an input to urban intelligent transportation systems, including routing and signal control. The alternative is a statistic that is only available after crashes accumulate.",
+      },
+      {
+        id: "routes",
+        title: "Safest versus fastest routes",
+        where: "Analytic Methods in Accident Research, 2023",
+        href: "https://doi.org/10.1016/j.amar.2023.100277",
+        text: "This paper shows that routing can minimize modeled crash risk instead of travel time alone. On the Athens network, the safest routes were about 22.8% lower in modeled risk than the fastest routes, which were about 11% quicker. That comparison is of estimated risk, not of observed crashes.",
+      },
+      {
+        title: "Hazardous location identification",
+        where: "Analytic Methods in Accident Research, 2023",
+        href: "https://doi.org/10.1016/j.amar.2022.100262",
+        text: "This paper uses conflict-based extreme-value models to flag hazardous locations over short intervals, not only from multi-year averages. In Athens, 2 of 47 locations looked hazardous on average risk, and 38 did once short-term peaks were included.",
+      },
+      {
+        title: "Signal-vehicle coupled control",
+        where: "Accident Analysis and Prevention, 2021",
+        href: "https://doi.org/10.1016/j.aap.2021.106389",
+        text: "This paper optimizes signal timing and connected-vehicle trajectories together, so the signal and the approaching vehicles are not treated as separate problems. The aim is fewer severe conflicts while operations stay acceptable.",
+      },
+      {
+        title: "Connected-vehicle intersection safety",
+        where: "MASc thesis, University of British Columbia, 2021",
+        href: "https://doi.org/10.14288/1.0401847",
+        text: "The thesis applies connected-vehicle data to real-time safety optimization at a single signalized intersection.",
+      },
+    ],
   },
   {
-    id: "signals",
-    title: "Camera-based corridor signal optimization",
-    where: "Rogers Communications and the BC Ministry of Transportation, 2024–2025",
-    text: "A proof of concept for multi-agent reinforcement learning on a corridor, covering vehicles and pedestrians. Mitacs Accelerate award of CAD $60,000. Primary contributor to the proposal.",
-  },
-  {
-    id: "routes",
-    title: "Safest-route identification",
-    where: "Published, Analytic Methods in Accident Research, 2023",
-    text: "A real-time routing method that looks for the route with the lower crash risk and sets that against travel time. The fastest route and the safest route are reported as different choices.",
-  },
-  {
-    title: "Cyclist passing distance",
-    where: "Province of British Columbia",
-    text: "Survival analysis of vehicle-cyclist interactions, and technical advice on minimum passing distance. The 1.5 m and 1 m recommendations were passed into the Motor Vehicle Act amendments in 2024.",
-  },
-  {
-    title: "Improving data collection",
-    where: "Transport Canada",
-    text: "A technical report and presentation on traditional and emerging sensing technologies, safety applications, and practices in other jurisdictions.",
-  },
-  {
-    title: "Rural road safety audit",
-    where: "An Indigenous community in British Columbia",
-    text: "Conflict analysis and a before-and-after study. Countermeasures were implemented and evaluated for safety and speeding.",
-  },
-  {
-    title: "Pavement marking evaluation",
-    where: "Provincial report",
-    text: "Computer vision used to evaluate how certain pavement markings relate to safety, in support of infrastructure investment and maintenance.",
+    id: "other",
+    title: "Other",
+    projects: [
+      {
+        id: "rag",
+        title: "ITE Traffic Bowl retrieval",
+        where: "Presented at ITE Canada, Victoria, 2026",
+        image: "/research/searchite.gif",
+        poster: "/research/searchite.jpg",
+        imageAlt: "SearchITE answering a transportation question from retrieved wiki passages",
+        text: "Traffic Bowl is ITE’s quiz competition. Clues are short, and answers are scored on the exact transportation term. I used the 2024 set of 94 questions as a retrieval test for models that run locally, with no cloud API. A local Qwen 9B scored 22 of 94 from memory. With a transportation wiki, hybrid search (embeddings and BM25), MMR, and HyDE, it scored 57 of 94. Other local models on the first hybrid setup stayed in the low 20s. Frontier models as of 2025 already scored 61 to 91 without this pipeline; they are a comparison, not the system.",
+      },
+    ],
   },
 ];
 
